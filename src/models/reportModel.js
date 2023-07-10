@@ -9,15 +9,19 @@ const reportSchema = new mongoose.Schema({
     default: 'other',
   },
   message: {
-    tyep: String,
-    minLength: 5,
-    maxLength: 500,
+    type: String,
+    minlength: 5,
+    maxlength: 500,
     required: true,
   },
-  action: {
+  status: {
     type: String,
     enum: ['pending', 'accepted', 'rejected'],
     default: 'pending',
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now(),
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -35,6 +39,12 @@ const reportSchema = new mongoose.Schema({
   },
 });
 
+// This is to prevent user to set the createdAt to a value other than current time
+reportSchema.pre('save', (next) => {
+  if (this.isNew && this.createdAt) this.createdAt = Date.now();
+  next();
+});
+
 const Report = mongoose.model('Report', reportSchema);
 
 const validateReport = (report, isRequired = true) => {
@@ -48,16 +58,19 @@ const validateReport = (report, isRequired = true) => {
       'unethical'
     ),
     message: Joi.string().min(5).max(500),
-    action: Joi.string().valid('pending', 'accepted', 'rejected'),
+    status: Joi.string().valid('pending', 'accepted', 'rejected'),
     userId: Joi.objectId(),
     adminId: Joi.objectId(),
     eventId: Joi.objectId(),
+
+    // these 2 are for filtering
+    after: Joi.date().timestamp('unix'),
+    before: Joi.date().timestamp('unix'),
   });
 
   if (isRequired)
-    joiSchema = joiSchema.fork(
-      ['message', 'userId', 'adminId', 'eventId'],
-      (item) => item.required()
+    joiSchema = joiSchema.fork(['message', 'userId', 'eventId'], (item) =>
+      item.required()
     );
   return joiSchema.validate(report);
 };
