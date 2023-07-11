@@ -1,5 +1,6 @@
 const debug = require('debug')('app:ReportController');
 const _ = require('lodash');
+const mongoose = require('mongoose');
 const { Report, validate } = require('../models/reportModel');
 const {
   success,
@@ -88,13 +89,100 @@ exports.getReports = async (req, res) => {
     }
 
     const result = await Report.find(queries, { __v: 0 });
-    return res.status(200).json(success(result));
+    return res
+      .status(200)
+      .json(success(result, `Found ${result.length} matching report(s).`));
   } catch (error) {
     debug(`Error in getReports: ${error}`);
     return res
       .status(500)
       .json(
         errorResponse('Internal Server Error! failed to fetch the Reports.')
+      );
+  }
+};
+
+exports.getReportById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const report = await Report.findById(id, { __v: 0 });
+    if (!report)
+      return res
+        .status(404)
+        .json(errorResponse(`Report with id ${id} does not exist.`, 404));
+    return res.status(200).json(success(report, 'Found successfully.'));
+  } catch (error) {
+    if (error instanceof mongoose.CastError)
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid Report Id: ${id}`, 400));
+    debug(`Error in getReportById: ${error}`);
+    return res
+      .status(500)
+      .json(
+        errorResponse(
+          'Internal Server Error! failed to fetch the Report by Id.'
+        )
+      );
+  }
+};
+
+exports.updateReportById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { error } = validate(req.body, false);
+    if (error)
+      return res
+        .status(400)
+        .json(validationError(error, error.details[0].message));
+    const result = await Report.findByIdAndUpdate(id, req.body, { new: true });
+    if (!result)
+      return res
+        .status(404)
+        .json(errorResponse(`Report with id ${id} does not exist.`, 404));
+
+    return res
+      .status(200)
+      .json(success(result, 'Report updated successfully.'));
+  } catch (error) {
+    if (error instanceof mongoose.CastError)
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid Report Id: ${id}`, 400));
+    debug(`Error in updateReportById: ${error}`);
+    return res
+      .status(500)
+      .json(
+        errorResponse(
+          'Internal Server Error! failed to update the Report by Id.'
+        )
+      );
+  }
+};
+
+exports.deleteReportById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await Report.findByIdAndDelete(id);
+    if (!result)
+      return res
+        .status(404)
+        .json(errorResponse(`Report with id ${id} does not exist.`, 404));
+    return res
+      .status(200)
+      .json(success(result, 'Report deleted successfully.'));
+  } catch (error) {
+    if (error instanceof mongoose.CastError)
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid Report Id: ${id}`, 400));
+    debug(`Error in deleteReportById: ${error}`);
+    return res
+      .status(500)
+      .json(
+        errorResponse(
+          'Internal Server Error! failed to delete the Report by Id.'
+        )
       );
   }
 };

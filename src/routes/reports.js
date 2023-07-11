@@ -2,10 +2,14 @@ const express = require('express');
 
 const router = express.Router();
 
-const UserController = require('../controllers/reportController');
+const reportController = require('../controllers/reportController');
 
 // getReports can be filtered by query
 // acceptable queries: status, category, after(time), before(time), userId, adminId, eventId
-router.get('/', UserController.getReports);
-router.post('/', UserController.addReport);
+router.get('/', reportController.getReports);
+router.post('/', reportController.addReport);
+router.get('/:id', reportController.getReportById);
+router.put('/:id', reportController.updateReportById);
+router.delete('/:id', reportController.deleteReportById);
+
 module.exports = router;
