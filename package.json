@@ -5,6 +5,9 @@
   "repository": "git@github.com:ReCoded-Org/backend-capstone-template.git",
   "author": "Ammar-64",
   "license": "MIT",
+  "engines": {
+    "node": ">=10.0.0" 
+  },
   "scripts": {
     "start": "nodemon src/app.js",
     "test": "yarn validate && jest --passWithNoTests",
@@ -18,6 +21,9 @@
     "debug": "^4.3.4",
     "dotenv": "^16.3.1",
     "express": "^4.17.2",
+    "joi": "^17.9.2",
+    "joi-objectid": "^4.0.2",
+    "lodash": "^4.17.21",
     "mongoose": "^7.3.2",
     "yarn-upgrade-all": "^0.6.1"
   },
