@@ -1,4 +1,4 @@
-const User = require('./userModel');
+const User = require('../model/userModel');
 const jwt = require('jsonwebtoken');
 const Joi = require('@hapi/joi');
 
@@ -73,7 +73,6 @@ exports.loginUser = async (req, res) => {
     }
 };
 
-
 // Authenticated User Controllers
 
 exports.getUserProfile = async (req, res) => {
@@ -88,14 +87,16 @@ exports.getUserProfile = async (req, res) => {
 
 exports.updateUserProfile = async (req, res) => {
     try {
-        const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+        const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true,
+        });
         if (!user) throw Error('User does not exist');
         res.json(user);
     } catch (e) {
         res.status(400).json({ msg: e.message });
     }
 };
-
 
 // Admin Controllers
 
@@ -107,7 +108,6 @@ exports.getUsers = async (req, res) => {
         res.status(400).json({ msg: e.message });
     }
 };
-
 
 exports.getUserById = async (req, res) => {
     try {
@@ -121,7 +121,10 @@ exports.getUserById = async (req, res) => {
 
 exports.updateUserById = async (req, res) => {
     try {
-        const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+        const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true,
+        });
         if (!user) throw Error('User does not exist');
         res.json(user);
     } catch (e) {
