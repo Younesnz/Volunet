@@ -18,6 +18,7 @@
         "postinstall": "husky install && husky add .husky/pre-commit \"yarn validate-staged\" && husky add .husky/pre-push \"yarn test\""
     },
     "dependencies": {
+        "bcrypt": "^5.1.0",
         "debug": "^4.3.4",
         "dotenv": "^16.3.1",
         "express": "^4.17.2",
