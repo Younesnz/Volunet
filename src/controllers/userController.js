@@ -1,4 +1,4 @@
-const User = require('../model/userModel');
+const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 const Joi = require('@hapi/joi');
 
