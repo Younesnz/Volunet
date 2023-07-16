@@ -23,7 +23,7 @@ const applicationSchema = new mongoose.Schema({
   eventId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Event',
-    required: true,
+    //  required: true, // it causes error while making events
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
