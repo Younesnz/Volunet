@@ -1,6 +1,7 @@
-const User = require('../model/userModel');
 const jwt = require('jsonwebtoken');
 const Joi = require('@hapi/joi');
+const bcrypt = require('bcryptjs');
+const User = require('../models/userModel');
 
 // Define validation
 const registerSchema = Joi.object({
@@ -24,11 +25,20 @@ exports.registerUser = async (req, res) => {
     const { username, email, password } = req.body;
 
     try {
-        const user = new User({ username, email, password });
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = new User({
+            username,
+            email,
+            password: hashedPassword,
+        });
+
         await user.save();
-        res.status(201).json({ message: 'User registered successfully' });
+        return res
+            .status(201)
+            .json({ message: 'User registered successfully' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 };
 
@@ -42,7 +52,7 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).select('+password');
 
         if (!user) {
             return res
@@ -50,7 +60,7 @@ exports.loginUser = async (req, res) => {
                 .json({ message: 'Invalid email or password' });
         }
 
-        const isMatch = await user.comparePassword(password);
+        const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res
@@ -58,18 +68,19 @@ exports.loginUser = async (req, res) => {
                 .json({ message: 'Invalid email or password' });
         }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+        const { _id: id, username } = user;
+        const token = jwt.sign({ id }, process.env.JWT_SECRET);
 
-        res.json({
+        return res.json({
             token,
             user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
+                id,
+                username,
+                email,
             },
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: err.message });
     }
 };
 
