@@ -16,20 +16,26 @@ const NotificationSchema = new mongoose.Schema({
     },
 });
 
-const AddressSchema = new mongoose.Schema({
-    street: String,
-    city: String,
-    state: String,
-    country: String,
-    zip: Number,
-});
-
-const LocationSchema = new mongoose.Schema({
-    geolocation: {
-        lat: Number,
-        long: Number,
+const locationSchema = new mongoose.Schema({
+    point: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            required: true,
+        },
+        coordinates: {
+            type: [Number], // two items, first longitude, and second latitude
+            required: true,
+        },
     },
-    address: AddressSchema,
+    country: {
+        type: String,
+        required: true,
+    },
+    city: {
+        type: String,
+        required: true,
+    },
 });
 
 const UserSchema = new mongoose.Schema({
@@ -63,7 +69,7 @@ const UserSchema = new mongoose.Schema({
         default: false,
     },
     profile_picture: String,
-    location: LocationSchema,
+    location: locationSchema,
     notifications: [NotificationSchema],
     role: {
         type: String,
@@ -84,43 +90,3 @@ UserSchema.methods.comparePassword = function (password) {
 };
 
 module.exports = mongoose.model('User', UserSchema);
-=======
-const bcrypt = require('bcrypt');
-
-const UserSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-  isAdmin: {
-    type: Boolean,
-    default: false,
-    required: true,
-  },
-});
-
-UserSchema.pre('save', async function (next) {
-  if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 10);
-  }
-  next();
-});
-
-UserSchema.methods.comparePassword = function (password) {
-  return bcrypt.compare(password, this.password);
-};
-
-const User = mongoose.model('User', UserSchema);
-
-exports.User = User;
-

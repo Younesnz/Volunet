@@ -27,7 +27,6 @@ exports.registerUser = async (req, res) => {
     const { username, email, password } = req.body;
 
     try {
-
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = new User({
@@ -35,7 +34,6 @@ exports.registerUser = async (req, res) => {
             email,
             password: hashedPassword,
         });
-
 
         await user.save();
         return res
@@ -56,7 +54,6 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-
         const user = await User.findOne({ email }).select('+password');
 
         if (!user) {
@@ -65,7 +62,6 @@ exports.loginUser = async (req, res) => {
                 .json({ message: 'Invalid email or password' });
         }
         const isMatch = await bcrypt.compare(password, user.password);
-
 
         if (!isMatch) {
             return res
@@ -76,14 +72,12 @@ exports.loginUser = async (req, res) => {
         const { _id: id, username } = user;
         const token = jwt.sign({ id }, process.env.JWT_SECRET);
 
-
         return res.json({
             token,
             user: {
                 id,
                 username,
                 email,
-
             },
         });
     } catch (err) {
@@ -114,7 +108,6 @@ exports.updateUserProfile = async (req, res) => {
         return res.json(user);
     } catch (e) {
         return res.status(400).json({ msg: e.message });
-
     }
 };
 
