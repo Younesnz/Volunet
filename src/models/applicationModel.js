@@ -3,37 +3,39 @@ const Joi = require('joi');
 Joi.objectId = require('joi-objectid')(Joi);
 
 const applicationSchema = new mongoose.Schema({
-    message: {
-        type: String,
-        maxlength: 500,
-        default: '',
-    },
-    status: {
-        type: String,
-        enum: ['pending', 'accepted', 'rejected'],
-        default: 'pending',
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now,
-    },
-    //   updatedAt: {
-    //     type: Date,
-    //   },
-    eventId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Event',
-        required: true,
-    },
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-    },
-    adminId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Admin',
-    },
+
+  message: {
+    type: String,
+    maxlength: 500,
+    default: '',
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'accepted', 'rejected'],
+    default: 'pending',
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  //   updatedAt: {
+  //     type: Date,
+  //   },
+  eventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    //  required: true, // it causes error while making events
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  adminId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+  },
+
 });
 
 const Application = mongoose.model('Application', applicationSchema);

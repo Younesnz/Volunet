@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
-const Joi = require('@hapi/joi');
+
+const Joi = require('joi');
 const bcrypt = require('bcryptjs');
+
 const User = require('../models/userModel');
 
 // Define validation
@@ -25,6 +27,7 @@ exports.registerUser = async (req, res) => {
     const { username, email, password } = req.body;
 
     try {
+
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = new User({
@@ -32,6 +35,7 @@ exports.registerUser = async (req, res) => {
             email,
             password: hashedPassword,
         });
+
 
         await user.save();
         return res
@@ -52,6 +56,7 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
+
         const user = await User.findOne({ email }).select('+password');
 
         if (!user) {
@@ -59,8 +64,8 @@ exports.loginUser = async (req, res) => {
                 .status(400)
                 .json({ message: 'Invalid email or password' });
         }
-
         const isMatch = await bcrypt.compare(password, user.password);
+
 
         if (!isMatch) {
             return res
@@ -71,12 +76,14 @@ exports.loginUser = async (req, res) => {
         const { _id: id, username } = user;
         const token = jwt.sign({ id }, process.env.JWT_SECRET);
 
+
         return res.json({
             token,
             user: {
                 id,
                 username,
                 email,
+
             },
         });
     } catch (err) {
@@ -90,9 +97,9 @@ exports.getUserProfile = async (req, res) => {
     try {
         const user = await User.findById(req.params.id).select('-password');
         if (!user) throw Error('User does not exist');
-        res.json(user);
+        return res.json(user);
     } catch (e) {
-        res.status(400).json({ msg: e.message });
+        return res.status(400).json({ msg: e.message });
     }
 };
 
@@ -103,9 +110,11 @@ exports.updateUserProfile = async (req, res) => {
             runValidators: true,
         });
         if (!user) throw Error('User does not exist');
-        res.json(user);
+
+        return res.json(user);
     } catch (e) {
-        res.status(400).json({ msg: e.message });
+        return res.status(400).json({ msg: e.message });
+
     }
 };
 
@@ -114,9 +123,10 @@ exports.updateUserProfile = async (req, res) => {
 exports.getUsers = async (req, res) => {
     try {
         const users = await User.find(req.query);
-        res.json(users);
+
+        return res.json(users);
     } catch (e) {
-        res.status(400).json({ msg: e.message });
+        return res.status(400).json({ msg: e.message });
     }
 };
 

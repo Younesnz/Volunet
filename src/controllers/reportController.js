@@ -142,22 +142,21 @@ exports.getReportById = async (req, res) => {
 };
 
 exports.updateReportById = async (req, res) => {
-    const { id } = req.params;
-    try {
-        const { error } = validate(req.body, false);
-        if (error)
-            return res
-                .status(400)
-                .json(validationError(error, error.details[0].message));
-        const result = await Report.findByIdAndUpdate(id, req.body, {
-            new: true,
-        });
-        if (!result)
-            return res
-                .status(404)
-                .json(
-                    errorResponse(`Report with id ${id} does not exist.`, 404)
-                );
+
+  const { id } = req.params;
+  try {
+    const { error } = validate(req.body, false);
+    if (error)
+      return res
+        .status(400)
+        .json(validationError(error, error.details[0].message));
+    const result = await Report.findByIdAndUpdate(id, req.body, {
+      new: true,
+    });
+    if (!result)
+      return res
+        .status(404)
+        .json(errorResponse(`Report with id ${id} does not exist.`, 404));
 
         return res
             .status(200)
