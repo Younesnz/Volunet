@@ -11,4 +11,4 @@ router.get('/', applicationController.getApps);
 router.put('/:id', applicationController.updateAppById);
 router.delete('/:id', applicationController.deleteAppById);
 
-module.exports=router;
+module.exports = router;

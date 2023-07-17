@@ -24,5 +24,5 @@ app.use('/api/v1/reports/', reportsRoute);
 
 const PORT = process.env.NODE_LOCAL_PORT || 3000;
 app.listen(PORT, () => {
-  debug(`Server started on port ${PORT}`);
+    debug(`Server started on port ${PORT}`);
 });
