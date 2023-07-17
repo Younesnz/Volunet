@@ -92,7 +92,7 @@ const eventSchema = new mongoose.Schema({
     default: 0,
   },
   rating: {
-    // TODO: Add rating routes
+    // TODO: Add rating count
     type: Number,
     min: 0,
     max: 5,
@@ -104,7 +104,7 @@ const eventSchema = new mongoose.Schema({
     required: !(this.type === 'online'), // TODO: test this
   },
   comments: {
-    type: commentSchema,
+    type: [commentSchema],
   },
   organizerId: {
     // will be set by Auth
@@ -118,7 +118,7 @@ const eventSchema = new mongoose.Schema({
     ref: 'Application',
     required: true,
   },
-  // registeredUsers: {
+  // registeredUsers: { // this will be implemented in user schema.
   //     type: [mongoose.Schema.Types.ObjectId],
   //     ref: 'User',
   //     required: true

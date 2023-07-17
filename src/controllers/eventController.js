@@ -255,3 +255,9 @@ exports.updateLikes = async (req, res) => res.send(req);
 exports.addComment = async (req, res) => res.send(req);
 
 exports.deleteCommentById = async (req, res) => res.send(req);
+
+exports.updateRating = async (req, res) => res.send(req);
+
+exports.addUserToEvent = async (req, res) => res.send(req);
+
+exports.deleteUserFromEvent = async (req, res) => res.send(req);
