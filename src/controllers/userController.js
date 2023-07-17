@@ -1,5 +1,8 @@
 const jwt = require('jsonwebtoken');
+
 const Joi = require('joi');
+const bcrypt = require('bcryptjs');
+
 const User = require('../models/userModel');
 
 // Define validation
@@ -24,7 +27,14 @@ exports.registerUser = async (req, res) => {
     const { username, email, password } = req.body;
 
     try {
-        const user = new User({ username, email, password });
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = new User({
+            username,
+            email,
+            password: hashedPassword,
+        });
+
         await user.save();
         return res
             .status(201)
@@ -44,15 +54,14 @@ exports.loginUser = async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email }).select('+password');
 
         if (!user) {
             return res
                 .status(400)
                 .json({ message: 'Invalid email or password' });
         }
-
-        const isMatch = await user.comparePassword(password);
+        const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res
@@ -60,14 +69,15 @@ exports.loginUser = async (req, res) => {
                 .json({ message: 'Invalid email or password' });
         }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+        const { _id: id, username } = user;
+        const token = jwt.sign({ id }, process.env.JWT_SECRET);
 
         return res.json({
             token,
             user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
+                id,
+                username,
+                email,
             },
         });
     } catch (err) {
@@ -94,6 +104,7 @@ exports.updateUserProfile = async (req, res) => {
             runValidators: true,
         });
         if (!user) throw Error('User does not exist');
+
         return res.json(user);
     } catch (e) {
         return res.status(400).json({ msg: e.message });
@@ -105,6 +116,7 @@ exports.updateUserProfile = async (req, res) => {
 exports.getUsers = async (req, res) => {
     try {
         const users = await User.find(req.query);
+
         return res.json(users);
     } catch (e) {
         return res.status(400).json({ msg: e.message });
