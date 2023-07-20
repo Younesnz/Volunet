@@ -79,6 +79,10 @@ const UserSchema = new mongoose.Schema({
   first_name: String,
   last_name: String,
   birthDate: Date,
+  joinedAt: {
+    type: Date,
+    default: Date.now,
+  },
   isVerified: {
     type: Boolean,
     default: false,
