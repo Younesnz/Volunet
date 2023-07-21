@@ -362,6 +362,86 @@ exports.deleteUserById = async (req, res) => {
   }
 };
 
-exports.getUserNotifications = async (req, res) => res.send(req);
-exports.createNotification = async (req, res) => res.send(req);
-exports.deleteNotification = async (req, res) => res.send(req);
+exports.getUserNotifications = async (req, res) => {
+  const id = req.userId; // from authMiddleware
+  try {
+    const notifications = await User.findById(id, { notifications: 1 });
+    if (!notifications)
+      return res
+        .status(404)
+        .json(errorResponse('Notifications not found.', 404));
+    return res
+      .status(200)
+      .json(success(notifications, 'Notifications fetched.'));
+  } catch (error) {
+    if (error instanceof mongoose.CastError)
+      return res.status(400).json(errorResponse(`Invalid User ID: ${id}`));
+    debug(`Error in getUserNotifications: ${error}`);
+    return res
+      .status(500)
+      .json(
+        errorResponse(
+          'Internal Server Error! Failed to fetch user notifications.'
+        )
+      );
+  }
+};
+
+const notificationSchema = Joi.object({
+  title: Joi.string().min(3).max(50).required(),
+  message: Joi.string().min(3).max(500).required(),
+});
+
+exports.createNotification = async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (req.isAdmin !== true)
+      // double check admin
+      return res.status(403).json(errorResponse('Access denied!', 403));
+    const { error } = notificationSchema.validate(req.body);
+    if (error)
+      return res
+        .status(400)
+        .json(validationError(error, error.details[0].message));
+    const result = await User.findByIdAndUpdate(id, {
+      $push: { notifications: req.body },
+    });
+    if (!result)
+      return res
+        .status(404)
+        .json(errorResponse(`User with ID ${id} does not exist.`));
+    return res.status(201).json(success(result, 'Notification created.'));
+  } catch (error) {
+    if (error instanceof mongoose.CastError)
+      return res.status(400).json(errorResponse(`Invalid User ID: ${id}`, 400));
+    debug(`Error in createNotification: ${error}`);
+    return res
+      .status(500)
+      .json('Internal server error. failed to create notification.');
+  }
+};
+exports.deleteNotification = async (req, res) => {
+  const { userId, notifId } = req.params;
+  try {
+    if (req.isAdmin !== true)
+      // double check admin
+      return res.status(403).json(errorResponse('Access denied!', 403));
+    const result = await User.findByIdAndUpdate(userId, {
+      $pull: { notifications: { _id: notifId } },
+    });
+    if (!result)
+      return res
+        .status(404)
+        .json(errorResponse(`User or Notification Not found`));
+    return res.status(200).json(success(result, 'Notification deleted.'));
+  } catch (error) {
+    if (error instanceof mongoose.CastError)
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid User ID: ${userId}`, 400));
+    debug(`Error in deleteNotification: ${error}`);
+    return res
+      .status(500)
+      .json('Internal server error. failed to delete notification.');
+  }
+};
