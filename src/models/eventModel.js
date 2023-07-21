@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Joi = require('joi');
 Joi.objectId = require('joi-objectid')(Joi);
 
+// TODO add Address sting to location
 const commentSchema = new mongoose.Schema({
   text: {
     type: String,

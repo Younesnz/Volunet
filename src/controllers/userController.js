@@ -1,157 +1,367 @@
+const debug = require('debug')('app:userController');
 const jwt = require('jsonwebtoken');
-
+const mongoose = require('mongoose');
 const Joi = require('joi');
+Joi.objectId = require('joi-objectid')(Joi);
 const bcrypt = require('bcryptjs');
+const passwordComplexity = require('joi-password-complexity');
 
 const User = require('../models/userModel');
 
+const {
+  success,
+  validationError,
+  errorResponse,
+} = require('../utils/responseUtils');
+
 // Define validation
+
 const registerSchema = Joi.object({
-    username: Joi.string().min(4).max(30).required(),
-    email: Joi.string().email().required(),
-    password: Joi.string().min(6).required(),
+  username: Joi.string().min(4).max(30).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(8).max(50).required(),
+  first_name: Joi.string().max(20),
+  last_name: Joi.string().max(20),
+  birthDate: Joi.date().iso(),
+  profilePic: Joi.string(),
+  country: Joi.string().max(20).required(),
+  city: Joi.string().max(20).required(),
 });
 
+const updateUserSchema = Joi.object({
+  username: Joi.string().min(4).max(30),
+  email: Joi.string().email(),
+  password: Joi.string().min(8).max(50),
+  first_name: Joi.string().max(20),
+  last_name: Joi.string().max(20),
+  birthDate: Joi.date().iso(),
+  profilePic: Joi.string(),
+  country: Joi.string().max(20),
+  city: Joi.string().max(20),
+  lon: Joi.number().min(-180).max(180),
+  lat: Joi.number().min(-90).max(90),
+});
 const loginSchema = Joi.object({
-    email: Joi.string().email().required(),
-    password: Joi.string().min(6).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
 });
 
+// TODO: check email and username and see if they're already exist
 exports.registerUser = async (req, res) => {
-    const { error } = registerSchema.validate(req.body);
+  const { error } = registerSchema.validate(req.body);
 
-    if (error) {
-        return res.status(400).json({ error: error.details[0].message });
-    }
+  if (error) {
+    return res
+      .status(400)
+      .json(validationError(error, error.details[0].message));
+  }
 
-    const { username, email, password } = req.body;
+  const { error: passwordError } = passwordComplexity({
+    min: 8,
+    max: 50,
+    lowerCase: 1,
+    upperCase: 1,
+    numeric: 1,
+    symbol: 0,
+    requirementCount: 3,
+  }).validate(req.body.password);
 
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
+  if (passwordError)
+    return res
+      .status(400)
+      .json(
+        validationError(
+          passwordError,
+          'Password should be at least 8 characters long, including both uppercase and lowercase letters, and at least one number.'
+        )
+      );
 
-        const user = new User({
-            username,
-            email,
-            password: hashedPassword,
-        });
+  const { password } = req.body;
 
-        await user.save();
-        return res
-            .status(201)
-            .json({ message: 'User registered successfully' });
-    } catch (err) {
-        return res.status(500).json({ error: err.message });
-    }
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      ...req.body,
+      password: hashedPassword,
+    });
+
+    const result = await user.save();
+    return res
+      .status(201)
+      .json(success(result, 'User registered successfully'));
+  } catch (err) {
+    debug(`Error in registerUser: ${err}`);
+    return res
+      .status(500)
+      .json(
+        errorResponse('Internal Server Error! failed to register the User.')
+      );
+  }
 };
 
 exports.loginUser = async (req, res) => {
-    const { error } = loginSchema.validate(req.body);
+  const { error } = loginSchema.validate(req.body);
 
-    if (error) {
-        return res.status(400).json({ error: error.details[0].message });
+  if (error) {
+    return res
+      .status(400)
+      .json(validationError(error, error.details[0].message));
+  }
+
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email }).select('+password');
+
+    if (!user) {
+      return res
+        .status(401)
+        .json(errorResponse('Invalid email or password', 401));
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json(errorResponse('Invalid email or password', 401));
     }
 
-    const { email, password } = req.body;
+    const { _id: id, username } = user;
+    const token = jwt.sign({ id }, process.env.JWT_SECRET);
 
-    try {
-        const user = await User.findOne({ email }).select('+password');
-
-        if (!user) {
-            return res
-                .status(400)
-                .json({ message: 'Invalid email or password' });
-        }
-        const isMatch = await bcrypt.compare(password, user.password);
-
-        if (!isMatch) {
-            return res
-                .status(400)
-                .json({ message: 'Invalid email or password' });
-        }
-
-        const { _id: id, username } = user;
-        const token = jwt.sign({ id }, process.env.JWT_SECRET);
-
-        return res.json({
-            token,
-            user: {
-                id,
-                username,
-                email,
-            },
-        });
-    } catch (err) {
-        return res.status(500).json({ error: err.message });
-    }
+    return res.json(
+      success(
+        {
+          token,
+          user: {
+            id,
+            username,
+            email,
+          },
+        },
+        'user logged in successfully.'
+      )
+    );
+  } catch (err) {
+    debug(`Error in loginUser: ${err}`);
+    return res
+      .status(500)
+      .json(errorResponse('Internal Server Error! failed to login the User.'));
+  }
 };
 
 // Authenticated User Controllers
 
 exports.getUserProfile = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id).select('-password');
-        if (!user) throw Error('User does not exist');
-        return res.json(user);
-    } catch (e) {
-        return res.status(400).json({ msg: e.message });
+  let userId;
+
+  // Check if :id parameter is present (admin accessing another user's profile)
+  if (req.params.id) {
+    userId = req.params.id;
+  } else {
+    // Assuming req.userId is set from the authMiddleware for regular users and admins accessing their own profile
+    userId = req.userId;
+  }
+
+  try {
+    const user = await User.findById(userId).select('-password -__v');
+    if (!user) {
+      return res
+        .status(404)
+        .json(errorResponse(`User with ID ${userId} not found!`, 404));
     }
+
+    // Additional check to restrict non-admins from accessing other users' profiles
+    if (!req.isAdmin && userId !== req.userId) {
+      return res.status(403).json(errorResponse('Access denied!', 403));
+    }
+
+    return res
+      .status(200)
+      .json(success(user, 'User profile fetched successfully'));
+  } catch (err) {
+    if (err instanceof mongoose.CastError) {
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid User ID: ${userId}`, 400));
+    }
+
+    debug(`Error in getUserProfile: ${err}`);
+    return res
+      .status(500)
+      .json(errorResponse('Internal Server Error! Failed to fetch user data.'));
+  }
 };
 
 exports.updateUserProfile = async (req, res) => {
-    try {
-        const user = await User.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true,
-        });
-        if (!user) throw Error('User does not exist');
+  let userId;
 
-        return res.json(user);
-    } catch (e) {
-        return res.status(400).json({ msg: e.message });
+  // Check if :id parameter is present (admin updating another user's profile)
+  if (req.params.id) {
+    userId = req.params.id;
+  } else {
+    // Assuming req.userId is set from the authMiddleware for regular users and admins updating their own profile
+    userId = req.userId;
+  }
+
+  try {
+    const { error } = updateUserSchema.validate(req.body);
+    if (error)
+      return res
+        .status(400)
+        .json(validationError(error, error.details[0].message));
+
+    // Additional check to restrict non-admins from updating other users' profiles
+    if (!req.isAdmin && userId !== req.userId) {
+      return res.status(403).json(errorResponse('Access denied!', 403));
     }
+
+    const user = await User.findByIdAndUpdate(userId, req.body, {
+      new: true,
+    });
+
+    if (!user)
+      return res
+        .status(404)
+        .json(errorResponse(`User with ID ${userId} not found!`, 404));
+
+    return res
+      .status(200)
+      .json(success(user, 'User profile updated successfully'));
+  } catch (err) {
+    if (err instanceof mongoose.CastError)
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid User ID: ${userId}`, 400));
+
+    debug(`Error in updateUserProfile: ${err}`);
+    return res
+      .status(500)
+      .json(
+        errorResponse('Internal Server Error! Failed to update user data.')
+      );
+  }
 };
 
 // Admin Controllers
 
+const filterSchema = Joi.object({
+  username: Joi.string().min(3).max(30),
+  email: Joi.string().min(3).max(50),
+  name: Joi.string().min(3).max(50),
+  olderThan: Joi.number().min(0).max(100),
+  youngerThan: Joi.number().min(0).max(100),
+  joinedBefore: Joi.date().timestamp(),
+  joinedAfter: Joi.date().timestamp(),
+  isVerified: Joi.boolean(),
+  role: Joi.string().valid('user', 'admin', 'organization'),
+  country: Joi.string().max(20),
+  city: Joi.string().max(20),
+  hasRated: Joi.objectId(),
+  hasLiked: Joi.objectId(),
+  hasJoined: Joi.objectId(),
+  limit: Joi.number().min(1).max(100),
+});
+
 exports.getUsers = async (req, res) => {
-    try {
-        const users = await User.find(req.query);
+  try {
+    const { error } = filterSchema.validate(req.query);
+    if (error)
+      return res
+        .status(400)
+        .json(validationError(error, error.details[0].message));
 
-        return res.json(users);
-    } catch (e) {
-        return res.status(400).json({ msg: e.message });
-    }
-};
+    const query = {};
 
-exports.getUserById = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-        if (!user) throw Error('User does not exist');
-        res.json(user);
-    } catch (e) {
-        res.status(400).json({ msg: e.message });
-    }
-};
+    if (req.query.username)
+      query.username = { $regex: new RegExp(req.query.username, 'i') };
 
-exports.updateUserById = async (req, res) => {
-    try {
-        const user = await User.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true,
-        });
-        if (!user) throw Error('User does not exist');
-        res.json(user);
-    } catch (e) {
-        res.status(400).json({ msg: e.message });
-    }
+    if (req.query.email)
+      query.email = { $regex: new RegExp(req.query.email, 'i') };
+
+    if (req.query.name)
+      query.$or = [
+        { first_name: { $regex: new RegExp(req.query.name, 'i') } },
+        { last_name: { $regex: new RegExp(req.query.name, 'i') } },
+      ];
+
+    if (req.query.olderThan)
+      query.birthDate = {
+        $lt: new Date(
+          Date.now() - req.query.olderThan * 365 * 24 * 60 * 60 * 1000
+        ),
+      };
+
+    if (req.query.youngerThan)
+      query.birthDate = {
+        ...(query.birthDate || {}),
+        $gt: new Date(
+          Date.now() - req.query.youngerThan * 365 * 24 * 60 * 60 * 1000
+        ),
+      };
+
+    if (req.query.joinedBefore)
+      query.joinedAt = { $lt: new Date(req.query.joinedBefore) };
+
+    if (req.query.joinedAfter)
+      query.joinedAt = {
+        ...(query.joinedAt || {}),
+        $gt: new Date(req.query.joinedAfter),
+      };
+
+    if (req.query.isVerified !== undefined)
+      query.isVerified = req.query.isVerified;
+
+    if (req.query.role) query.role = req.query.role;
+
+    if (req.query.country) query['location.country'] = req.query.country;
+
+    if (req.query.city) query['location.city'] = req.query.city;
+
+    if (req.query.hasRated)
+      query['ratedEvents.eventId'] = { $in: [req.query.hasRated] };
+
+    if (req.query.hasLiked) query.likedEvents = { $in: [req.query.hasLiked] };
+
+    if (req.query.hasJoined)
+      query.joinedEvents = { $in: [req.query.hasJoined] };
+
+    const limit = req.query.limit || 50;
+
+    const users = await User.find(query).limit(limit);
+
+    return res
+      .status(200)
+      .json(success(users, `${users.length} user(s) found`));
+  } catch (err) {
+    debug(`Error in getUsers: ${err}`);
+    return res
+      .status(500)
+      .json(errorResponse('Internal Server Error! Failed to fetch users'));
+  }
 };
 
 exports.deleteUserById = async (req, res) => {
-    try {
-        const user = await User.findByIdAndDelete(req.params.id);
-        if (!user) throw Error('User does not exist');
-        res.json({ msg: 'User deleted successfully' });
-    } catch (e) {
-        res.status(400).json({ msg: e.message });
-    }
+  const { id } = req.params;
+  try {
+    const user = await User.findByIdAndDelete(id);
+    if (!user)
+      return res
+        .status(404)
+        .json(errorResponse(`User with id ${id} does not exist.`, 404));
+    return res.status(200).json(success(user, 'User deleted successfully.'));
+  } catch (err) {
+    if (err instanceof mongoose.CastError)
+      return res.status(400).json(errorResponse(`Invalid User ID: ${id}`, 400));
+
+    debug(`Error in deleteUserById: ${err}`);
+    return res
+      .status(500)
+      .json(errorResponse('Internal Server Error! Failed to delete user'));
+  }
 };
+
+exports.getUserNotifications = async (req, res) => res.send(req);
+exports.createNotification = async (req, res) => res.send(req);
+exports.deleteNotification = async (req, res) => res.send(req);
