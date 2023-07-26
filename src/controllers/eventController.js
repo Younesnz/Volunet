@@ -27,6 +27,10 @@ exports.getEventById = async (req, res) => {
       .populate({
         path: 'applicationId',
         select: '_id status',
+      })
+      .populate({
+        path: 'comments.userId',
+        select: '_id username role isVerified profilePic',
       });
     if (!event)
       return res
@@ -57,12 +61,13 @@ exports.addEvent = async (req, res) => {
         .json(validationError(error, error.details[0].message));
     const application = new Application({
       eventId: null, // Placeholder
-      userId: req.body.organizerId, // TODO: set by Auth
+      userId: req.userId,
     });
 
     const event = new Event({
       ...req.body,
       applicationId: application._id,
+      organizerId: req.userId,
     });
 
     application.eventId = event._id;
@@ -97,13 +102,22 @@ exports.updateEventById = async (req, res) => {
       return res
         .status(400)
         .json(validationError(error, error.details[0].message));
-    const result = await Event.findByIdAndUpdate(id, req.body, {
-      new: true,
-    });
-    if (!result)
+
+    // Check if the event exists
+    const event = await Event.findById(id);
+    if (!event)
       return res
         .status(404)
         .json(errorResponse(`Event with id ${id} does not exist.`, 404));
+
+    // Check if the current user is an admin or the organizer of the event
+    if (!req.isAdmin && event.organizerId.toString() !== req.userId)
+      return res.status(403).json(errorResponse('Access denied.', 403));
+
+    // If the current user is the organizer or an admin, update the event
+    const result = await Event.findByIdAndUpdate(id, req.body, {
+      new: true,
+    });
 
     return res.status(200).json(success(result, 'Event updated successfully.'));
   } catch (error) {
@@ -116,7 +130,7 @@ exports.updateEventById = async (req, res) => {
       .status(500)
       .json(
         errorResponse(
-          'Internal Server Error! failed to update the Event by Id.'
+          'Internal Server Error! Failed to update the Event by Id.'
         )
       );
   }
@@ -187,7 +201,7 @@ exports.getEvents = async (req, res) => {
       })
       .populate({
         path: 'applicationId',
-        match: { status: 'accepted' },
+        match: { status: 'accepted' }, // only accepted events
         select: '_id',
         model: Application,
       });
@@ -235,11 +249,19 @@ exports.getEvents = async (req, res) => {
 exports.deleteEventById = async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await Event.findByIdAndDelete(id);
-    if (!result)
+    // Check if the event exists
+    const event = await Event.findById(id);
+    if (!event)
       return res
         .status(404)
         .json(errorResponse(`Event with id ${id} does not exist.`, 404));
+
+    // Check if the current user is an admin or the organizer of the event
+    if (!req.isAdmin && event.organizerId.toString() !== req.userId)
+      return res.status(403).json(errorResponse('Access denied.', 403));
+
+    // If the current user is the organizer or an admin, proceed with deletion
+    const result = await Event.findByIdAndDelete(id);
     return res.status(200).json(success(result, 'Event deleted successfully.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
@@ -251,7 +273,7 @@ exports.deleteEventById = async (req, res) => {
       .status(500)
       .json(
         errorResponse(
-          'Internal Server Error! failed to delete the Event by Id.'
+          'Internal Server Error! Failed to delete the Event by Id.'
         )
       );
   }

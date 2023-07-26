@@ -47,6 +47,7 @@ const loginSchema = Joi.object({
 });
 
 // TODO: check email and username and see if they're already exist
+// about the above TODO: Mongo will throw an error because these fields are unique so we need to handle it in catch block
 exports.registerUser = async (req, res) => {
   const { error } = registerSchema.validate(req.body);
 
@@ -165,7 +166,27 @@ exports.getUserProfile = async (req, res) => {
   }
 
   try {
-    const user = await User.findById(userId).select('-password -__v');
+    const user = await User.findById(userId)
+      .select('-password -__v')
+      .populate({
+        path: 'likedEvents',
+        select:
+          'title description category type date pictures likes rating ratingCount registeredCount',
+      })
+      .populate({
+        path: 'joinedEvents',
+        select:
+          'title description category type date pictures likes rating ratingCount registeredCount',
+      })
+      .populate({
+        path: 'createdEvents',
+        select:
+          'title description category type date pictures likes rating ratingCount registeredCount applicationId',
+        populate: {
+          path: 'applicationId',
+          select: 'status',
+        },
+      });
     if (!user) {
       return res
         .status(404)
@@ -266,6 +287,10 @@ const filterSchema = Joi.object({
 
 exports.getUsers = async (req, res) => {
   try {
+    if (!req.isAdmin) {
+      return res.status(403).json(errorResponse('Access denied!', 403));
+    }
+
     const { error } = filterSchema.validate(req.query);
     if (error)
       return res
@@ -345,6 +370,10 @@ exports.getUsers = async (req, res) => {
 exports.deleteUserById = async (req, res) => {
   const { id } = req.params;
   try {
+    if (!req.isAdmin) {
+      return res.status(403).json(errorResponse('Access denied!', 403));
+    }
+
     const user = await User.findByIdAndDelete(id);
     if (!user)
       return res

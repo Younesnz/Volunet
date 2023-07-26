@@ -265,7 +265,7 @@ const validateEvent = (event, isRequired = true) => {
     type: Joi.string().valid('online', 'physical', 'both'),
     date: Joi.date().timestamp(), // all dates are recieving as timestamp for consistancy
     pictures: Joi.array().items(Joi.string()),
-    organizerId: Joi.objectId(), // TODO: delete this after testing. it shouldn't be allowed
+    // organizerId: Joi.objectId(), // TODO: delete this after testing. it shouldn't be allowed
 
     address: Joi.string().min(5).max(100),
 
