@@ -3,6 +3,8 @@ const express = require('express');
 const passport = require('passport');
 const session = require('express-session');
 
+require('./middleware/googleAuth');
+
 const app = express();
 const debug = require('debug')('app:server');
 
