@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const passport = require('passport');
+const jwt = require('jsonwebtoken'); // add this line
 const userController = require('../controllers/userController');
 const { authenticate, adminOnly } = require('../middleware/auth');
 
@@ -19,8 +20,13 @@ router.get(
   '/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/login' }),
   (req, res) => {
-    // Successful authentication, redirect home.
-    res.redirect('/');
+    // User has been authenticated by Google and user has been set on req by Passport
+
+    // JWT for user
+    const token = jwt.sign({ _id: req.user._id }, process.env.JWT_SECRET);
+
+    // Send JWT back to client. Client stores this to send it in later requests
+    res.status(200).json({ token, user: req.user });
   }
 );
 
