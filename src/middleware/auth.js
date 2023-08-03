@@ -15,8 +15,8 @@ const authenticate = async (req, res, next) => {
       throw new Error();
     }
 
-    // Attach user and token to the request object
-    req.user = user;
+    // Attach userId to the request object
+    req.userId = user._id;
     req.token = token;
     next();
   } catch (error) {
@@ -27,7 +27,9 @@ const authenticate = async (req, res, next) => {
 // Admin authentication
 const adminOnly = async (req, res, next) => {
   try {
-    if (req.user && req.user.isAdmin) {
+    const user = await User.findById(req.userId);
+    if (user && user.isAdmin) {
+      req.isAdmin = user.isAdmin;
       next();
     } else {
       throw new Error();
