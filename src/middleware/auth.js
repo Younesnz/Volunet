@@ -17,7 +17,7 @@ const authenticate = async (req, res, next) => {
 
     // Attach userId to the request object
     req.userId = user._id;
-    req.token = token;
+    req.userRole = user.role;
     next();
   } catch (error) {
     res.status(401).send({ error: 'Please authenticate.' });
@@ -28,10 +28,11 @@ const authenticate = async (req, res, next) => {
 const adminOnly = async (req, res, next) => {
   try {
     const user = await User.findById(req.userId);
-    if (user && user.isAdmin) {
-      req.isAdmin = user.isAdmin;
+    if (user && user.role === 'admin') {
+      req.isAdmin = true; // set isAdmin true if user role is admin
       next();
     } else {
+      req.isAdmin = false; // set isAdmin false if user role is not admin
       throw new Error();
     }
   } catch (error) {
