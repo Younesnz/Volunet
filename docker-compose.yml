@@ -1,0 +1,27 @@
+version: '3.9'
+
+services:
+  #MongoDB Services
+  mongo_db:
+    container_name: db_container
+    image: mongo:latest
+    restart: always
+    volumes:
+      - mongo_db:/data/db
+  
+  #Node API Service
+  api:
+    build: .
+    ports:
+      - 3000:3000
+    volumes: 
+      - .:/app
+    environment:
+      PORT: 3000
+      MONGODB_URI: mongodb://mongo_db:27017
+      DB_NAME: 'simpleBackendDB'
+      DEBUG: 'app:*'
+    depends_on:
+      - mongo_db
+volumes:
+  mongo_db: {}
