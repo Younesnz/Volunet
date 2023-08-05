@@ -13,6 +13,10 @@ const debug = require('debug')('app:server');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Set up EJS as view engine
+app.set('view engine', 'ejs');
+app.use(express.static('public'));
+
 const swaggerDefinitions = require('./swaggerDefinitions');
 // Swagger configuration
 const options = {
@@ -52,6 +56,10 @@ const applicationsRoute = require('./routes/applications');
 const eventsRoute = require('./routes/events');
 const reportsRoute = require('./routes/reports');
 const usersRoute = require('./routes/users');
+
+app.get('/', (req, res) => {
+  res.render('index');
+});
 
 app.use('/api/v1/applications/', applicationsRoute);
 app.use('/api/v1/events/', eventsRoute);
