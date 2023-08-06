@@ -13,6 +13,9 @@ const debug = require('debug')('app:server');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files from the "views" directory
+app.use(express.static('views'));
+
 const swaggerDefinitions = require('./swaggerDefinitions');
 // Swagger configuration
 const options = {
@@ -52,6 +55,11 @@ const applicationsRoute = require('./routes/applications');
 const eventsRoute = require('./routes/events');
 const reportsRoute = require('./routes/reports');
 const usersRoute = require('./routes/users');
+
+// Home page
+app.get('/', (req, res) => {
+  res.sendFile('public/index.html');
+});
 
 app.use('/api/v1/applications/', applicationsRoute);
 app.use('/api/v1/events/', eventsRoute);
