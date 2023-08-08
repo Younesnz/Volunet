@@ -26,13 +26,12 @@ app.use(passport.session());
 // Initialize DB
 require('./db')();
 
-// const usersRoute = require('./routes/users');
+const usersRoute = require('./routes/users');
 const applicationsRoute = require('./routes/applications');
 const eventsRoute = require('./routes/events');
 const reportsRoute = require('./routes/reports');
-const usersRoute = require('./routes/users');
 
-// app.use('/api/v1/users/', usersRoute);
+app.use('/api/v1/users/', usersRoute);
 app.use('/api/v1/applications/', applicationsRoute);
 app.use('/api/v1/events/', eventsRoute);
 app.use('/api/v1/reports/', reportsRoute);

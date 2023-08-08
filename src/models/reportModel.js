@@ -64,8 +64,8 @@ const validateReport = (report, isRequired = true) => {
     eventId: Joi.objectId(),
 
     // these 2 are for filtering
-    after: Joi.date().timestamp('unix'),
-    before: Joi.date().timestamp('unix'),
+    after: Joi.date().iso(),
+    before: Joi.date().iso(),
   });
 
   if (isRequired)

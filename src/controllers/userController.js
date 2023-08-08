@@ -28,26 +28,23 @@ const registerSchema = Joi.object({
   city: Joi.string().max(20).required(),
 });
 
-const updateUserSchema = Joi.object({
+let updateUserSchema = Joi.object({
   username: Joi.string().min(4).max(30),
   email: Joi.string().email(),
-  password: Joi.string().min(8).max(50),
   first_name: Joi.string().max(20),
   last_name: Joi.string().max(20),
   birthDate: Joi.date().iso(),
   profilePic: Joi.string(),
   country: Joi.string().max(20),
   city: Joi.string().max(20),
-  lon: Joi.number().min(-180).max(180),
-  lat: Joi.number().min(-90).max(90),
-});
+})
+  .min(1)
+  .message('At least one field must be provided.');
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
 });
 
-// TODO: check email and username and see if they're already exist
-// about the above TODO: Mongo will throw an error because these fields are unique so we need to handle it in catch block
 exports.registerUser = async (req, res) => {
   const { error } = registerSchema.validate(req.body);
 
@@ -78,20 +75,36 @@ exports.registerUser = async (req, res) => {
       );
 
   const { password } = req.body;
-
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const user = new User({
       ...req.body,
       password: hashedPassword,
+      location: {
+        city: req.body.city,
+        country: req.body.country,
+      },
     });
 
     const result = await user.save();
     return res
       .status(201)
-      .json(success(result, 'User registered successfully'));
+      .json(
+        success(
+          { username: result.username, email: result.email },
+          'User registered successfully'
+        )
+      );
   } catch (err) {
+    if (err.code === 11000)
+      return res
+        .status(400)
+        .json(
+          validationError(
+            err,
+            `${err.keyPattern.username ? 'Username' : 'Email'} already exists.`
+          )
+        );
     debug(`Error in registerUser: ${err}`);
     return res
       .status(500)
@@ -113,19 +126,20 @@ exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: email.toLowerCase() }).select(
+      '+password'
+    );
 
     if (!user) {
       return res
         .status(401)
-        .json(errorResponse('Invalid email or password', 401));
+        .json(errorResponse('Invalid email or password', 401, 'unauthorized'));
     }
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
       return res
         .status(401)
-        .json(errorResponse('Invalid email or password', 401));
+        .json(errorResponse('Invalid email or password', 401, 'unauthorized'));
     }
 
     const { _id: id, username } = user;
@@ -190,7 +204,9 @@ exports.getUserProfile = async (req, res) => {
     if (!user) {
       return res
         .status(404)
-        .json(errorResponse(`User with ID ${userId} not found!`, 404));
+        .json(
+          errorResponse(`User with ID ${userId} not found!`, 404, 'not found')
+        );
     }
 
     // Additional check to restrict non-admins from accessing other users' profiles
@@ -205,7 +221,7 @@ exports.getUserProfile = async (req, res) => {
     if (err instanceof mongoose.CastError) {
       return res
         .status(400)
-        .json(errorResponse(`Invalid User ID: ${userId}`, 400));
+        .json(errorResponse(`Invalid User ID: ${userId}`, 400, 'validation'));
     }
 
     debug(`Error in getUserProfile: ${err}`);
@@ -215,6 +231,7 @@ exports.getUserProfile = async (req, res) => {
   }
 };
 
+// TODO: password should be changed in another endpoint
 exports.updateUserProfile = async (req, res) => {
   let userId;
 
@@ -227,6 +244,12 @@ exports.updateUserProfile = async (req, res) => {
   }
 
   try {
+    if (req.isAdmin)
+      // Add ability to update role or isVerified by Admins
+      updateUserSchema = updateUserSchema.append({
+        role: Joi.string().valid('user', 'admin', 'organization'),
+        isVerified: Joi.boolean(),
+      });
     const { error } = updateUserSchema.validate(req.body);
     if (error)
       return res
@@ -240,21 +263,32 @@ exports.updateUserProfile = async (req, res) => {
 
     const user = await User.findByIdAndUpdate(userId, req.body, {
       new: true,
-    });
+    }).select('-password -__v');
 
     if (!user)
       return res
         .status(404)
-        .json(errorResponse(`User with ID ${userId} not found!`, 404));
+        .json(
+          errorResponse(`User with ID ${userId} not found!`, 404, 'not found')
+        );
 
     return res
       .status(200)
       .json(success(user, 'User profile updated successfully'));
   } catch (err) {
+    if (err.code === 11000)
+      return res
+        .status(400)
+        .json(
+          validationError(
+            err,
+            `${err.keyPattern.username ? 'Username' : 'Email'} already exists.`
+          )
+        );
     if (err instanceof mongoose.CastError)
       return res
         .status(400)
-        .json(errorResponse(`Invalid User ID: ${userId}`, 400));
+        .json(errorResponse(`Invalid User ID: ${userId}`, 400, 'validation'));
 
     debug(`Error in updateUserProfile: ${err}`);
     return res
@@ -271,10 +305,10 @@ const filterSchema = Joi.object({
   username: Joi.string().min(3).max(30),
   email: Joi.string().min(3).max(50),
   name: Joi.string().min(3).max(50),
-  olderThan: Joi.number().min(0).max(100),
-  youngerThan: Joi.number().min(0).max(100),
-  joinedBefore: Joi.date().timestamp(),
-  joinedAfter: Joi.date().timestamp(),
+  olderThan: Joi.number().integer().min(0).max(100),
+  youngerThan: Joi.number().integer().min(0).max(100),
+  joinedBefore: Joi.date().iso(),
+  joinedAfter: Joi.date().iso(),
   isVerified: Joi.boolean(),
   role: Joi.string().valid('user', 'admin', 'organization'),
   country: Joi.string().max(20),
@@ -282,7 +316,7 @@ const filterSchema = Joi.object({
   hasRated: Joi.objectId(),
   hasLiked: Joi.objectId(),
   hasJoined: Joi.objectId(),
-  limit: Joi.number().min(1).max(100),
+  limit: Joi.number().integer().min(1).max(100),
 });
 
 exports.getUsers = async (req, res) => {
@@ -378,11 +412,15 @@ exports.deleteUserById = async (req, res) => {
     if (!user)
       return res
         .status(404)
-        .json(errorResponse(`User with id ${id} does not exist.`, 404));
+        .json(
+          errorResponse(`User with id ${id} does not exist.`, 404, 'not found')
+        );
     return res.status(200).json(success(user, 'User deleted successfully.'));
   } catch (err) {
     if (err instanceof mongoose.CastError)
-      return res.status(400).json(errorResponse(`Invalid User ID: ${id}`, 400));
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid User ID: ${id}`, 400, 'validation'));
 
     debug(`Error in deleteUserById: ${err}`);
     return res
@@ -398,13 +436,15 @@ exports.getUserNotifications = async (req, res) => {
     if (!notifications)
       return res
         .status(404)
-        .json(errorResponse('Notifications not found.', 404));
+        .json(errorResponse('User not found.', 404, 'not found'));
     return res
       .status(200)
-      .json(success(notifications, 'Notifications fetched.'));
+      .json(success(notifications, 'fetched user notifications.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
-      return res.status(400).json(errorResponse(`Invalid User ID: ${id}`));
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid User ID: ${id}`, 400, 'validation'));
     debug(`Error in getUserNotifications: ${error}`);
     return res
       .status(500)
@@ -419,6 +459,7 @@ exports.getUserNotifications = async (req, res) => {
 const notificationSchema = Joi.object({
   title: Joi.string().min(3).max(50).required(),
   message: Joi.string().min(3).max(500).required(),
+  sendEmail: Joi.boolean(),
 });
 
 exports.createNotification = async (req, res) => {
@@ -432,17 +473,25 @@ exports.createNotification = async (req, res) => {
       return res
         .status(400)
         .json(validationError(error, error.details[0].message));
-    const result = await User.findByIdAndUpdate(id, {
-      $push: { notifications: req.body },
-    });
+    const result = await User.findByIdAndUpdate(
+      id,
+      {
+        $push: { notifications: req.body },
+      },
+      { new: true }
+    ).select('_id notifications');
     if (!result)
       return res
         .status(404)
-        .json(errorResponse(`User with ID ${id} does not exist.`));
+        .json(
+          errorResponse(`User with ID ${id} does not exist.`, 404, 'not found')
+        );
     return res.status(201).json(success(result, 'Notification created.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
-      return res.status(400).json(errorResponse(`Invalid User ID: ${id}`, 400));
+      return res
+        .status(400)
+        .json(errorResponse(`Invalid User ID: ${id}`, 400, 'validation'));
     debug(`Error in createNotification: ${error}`);
     return res
       .status(500)
@@ -455,19 +504,25 @@ exports.deleteNotification = async (req, res) => {
     if (req.isAdmin !== true)
       // double check admin
       return res.status(403).json(errorResponse('Access denied!', 403));
-    const result = await User.findByIdAndUpdate(userId, {
-      $pull: { notifications: { _id: notifId } },
-    });
+    const result = await User.findByIdAndUpdate(
+      userId,
+      {
+        $pull: { notifications: { _id: notifId } },
+      },
+      { new: true }
+    ).select('_id notifications');
     if (!result)
       return res
         .status(404)
-        .json(errorResponse(`User or Notification Not found`));
+        .json(
+          errorResponse(`User or Notification Not found`, 404, 'not found')
+        );
     return res.status(200).json(success(result, 'Notification deleted.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
       return res
         .status(400)
-        .json(errorResponse(`Invalid User ID: ${userId}`, 400));
+        .json(errorResponse(`Invalid User ID: ${userId}`, 400, 'validation'));
     debug(`Error in deleteNotification: ${error}`);
     return res
       .status(500)

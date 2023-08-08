@@ -1,10 +1,14 @@
 const mongoose = require('mongoose');
 
-const bcrypt = require('bcryptjs');
+// const bcrypt = require('bcryptjs');
 
 const NotificationSchema = new mongoose.Schema({
   title: String,
   message: String,
+  sendEmail: {
+    type: Boolean,
+    default: false,
+  },
   status: {
     type: String,
     enum: ['unread', 'read'],
@@ -17,23 +21,16 @@ const NotificationSchema = new mongoose.Schema({
 });
 
 const locationSchema = new mongoose.Schema({
-  point: {
-    type: {
-      type: String,
-      enum: ['Point'],
-      required: true,
-    },
-    coordinates: {
-      type: [Number], // two items, first longitude, and second latitude
-      required: true,
-    },
-  },
   country: {
     type: String,
+    lowercase: true,
+    trim: true,
     required: true,
   },
   city: {
     type: String,
+    lowercase: true,
+    trim: true,
     required: true,
   },
 });
@@ -56,13 +53,13 @@ const UserSchema = new mongoose.Schema({
   username: {
     type: String,
     required: [true, 'Please provide a username'],
+    lowercase: true,
+    trim: true,
     unique: true,
   },
   password: {
     type: String,
     required: [true, 'Please add a password'],
-    minlength: 8,
-    maxlength: 50,
     select: false,
   },
   email: {
@@ -73,11 +70,20 @@ const UserSchema = new mongoose.Schema({
       /^([\w-.]+@([\w-]+\.)+[\w-]{2,4})?$/,
       'Please provide a valid email',
     ],
+    lowercase: true,
   },
 
   googleID: String,
-  first_name: String,
-  last_name: String,
+  first_name: {
+    type: String,
+    lowercase: true,
+    trim: true,
+  },
+  last_name: {
+    type: String,
+    lowercase: true,
+    trim: true,
+  },
   birthDate: Date,
   joinedAt: {
     type: Date,
@@ -88,7 +94,10 @@ const UserSchema = new mongoose.Schema({
     default: false,
   },
   profilePic: String,
-  location: locationSchema,
+  location: {
+    type: locationSchema,
+    required: true,
+  },
   notifications: [NotificationSchema],
   role: {
     type: String,
@@ -117,16 +126,19 @@ const UserSchema = new mongoose.Schema({
   ],
 });
 
-UserSchema.pre('save', async function (next) {
-  if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 10);
-  }
-  next();
-});
+UserSchema.index({ username: 1, email: 1 }, { unique: true }); // enforce unique for username and email
 
-UserSchema.methods.comparePassword = function (password) {
-  return bcrypt.compare(password, this.password);
-};
+// (From Younes): These functions are already available in UserController so there's no need to have them here too
+// UserSchema.pre('save', async function (next) {
+//   if (this.isModified('password')) {
+//     this.password = await bcrypt.hash(this.password, 10);
+//   }
+//   next();
+// });
+
+// UserSchema.methods.comparePassword = function (password) {
+//   return bcrypt.compare(password, this.password);
+// };
 
 const User = mongoose.model('User', UserSchema);
 

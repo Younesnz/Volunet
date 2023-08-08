@@ -5,9 +5,14 @@ module.exports = {
     message,
   }),
 
-  errorResponse: (message = 'Internal Server Error', status = 500) => ({
+  errorResponse: (
+    message = 'Internal Server Error',
+    status = 500,
+    type = 'server'
+  ) => ({
     success: false,
     error: {
+      type,
       message,
       status,
     },
@@ -16,7 +21,8 @@ module.exports = {
   validationError: (errors, message = '', status = 400) => ({
     success: false,
     error: {
-      message: `Validation Error: ${message}`,
+      type: 'validation',
+      message,
       status,
       errors,
     },

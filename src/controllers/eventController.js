@@ -2,13 +2,8 @@ const debug = require('debug')('app:eventController');
 const mongoose = require('mongoose');
 const Joi = require('joi');
 Joi.objectId = require('joi-objectid')(Joi);
-const {
-  Event,
-  validate,
-  validateQuery,
-  validateComment,
-} = require('../models/eventModel');
-const { User } = require('../models/userModel');
+const { Event, validate, validateQuery } = require('../models/eventModel');
+const User = require('../models/userModel');
 const { Application } = require('../models/applicationModel');
 const {
   success,
@@ -51,7 +46,6 @@ exports.getEventById = async (req, res) => {
   }
 };
 
-// TODO: organizer by Auth
 exports.addEvent = async (req, res) => {
   try {
     const { error } = validate(req.body);
@@ -59,6 +53,19 @@ exports.addEvent = async (req, res) => {
       return res
         .status(400)
         .json(validationError(error, error.details[0].message));
+
+    if (req.body.type !== 'online') {
+      req.body.location = {
+        point: {
+          type: 'Point',
+          coordinates: [req.body.lon, req.body.lat],
+        },
+        country: req.body.country,
+        city: req.body.city,
+        address: req.body.address,
+      };
+    }
+
     const application = new Application({
       eventId: null, // Placeholder
       userId: req.userId,
@@ -77,11 +84,15 @@ exports.addEvent = async (req, res) => {
       application.save(),
     ]);
 
+    await User.findByIdAndUpdate(req.userId, {
+      $push: { createdEvents: event._id },
+    });
+
     return res
       .status(200)
       .json(
         success(
-          { ...savedEvent, application: savedApplication },
+          { ...savedEvent.toObject(), application: savedApplication },
           'Event added successfully.'
         )
       );
@@ -111,10 +122,52 @@ exports.updateEventById = async (req, res) => {
         .json(errorResponse(`Event with id ${id} does not exist.`, 404));
 
     // Check if the current user is an admin or the organizer of the event
-    if (!req.isAdmin && event.organizerId.toString() !== req.userId)
-      return res.status(403).json(errorResponse('Access denied.', 403));
+    if (!req.isAdmin && event.organizerId.toString() !== req.userId.toString())
+      return res
+        .status(403)
+        .json(errorResponse('Access denied.', 403, 'Authorization'));
 
-    // If the current user is the organizer or an admin, update the event
+    if (
+      req.body.type !== 'online' &&
+      (req.body.lon ||
+        req.body.lat ||
+        req.body.country ||
+        req.body.city ||
+        req.body.address)
+    ) {
+      if (!event.location) {
+        event.location = {
+          point: {
+            type: 'Point',
+            coordinates: [0, 0],
+          },
+        };
+      }
+      if (req.body.lon) event.location.point.coordinates[0] = req.body.lon;
+      if (req.body.lat) event.location.point.coordinates[1] = req.body.lat;
+      if (req.body.country) event.location.country = req.body.country;
+      if (req.body.city) event.location.city = req.body.city;
+      if (req.body.address) event.location.address = req.body.address;
+
+      await event.save();
+    }
+
+    if (
+      req.body.contactPhone ||
+      req.body.contactEmail ||
+      req.body.contactWebsite
+    ) {
+      const { contactPhone, contactEmail, contactWebsite, ...others } =
+        req.body;
+      req.body = others;
+      if (!event.contact) event.contact = {};
+
+      if (contactPhone) event.contact.phone = contactPhone;
+      if (contactEmail) event.contact.email = contactEmail;
+      if (contactWebsite) event.contact.website = contactWebsite;
+      await event.save();
+    }
+
     const result = await Event.findByIdAndUpdate(id, req.body, {
       new: true,
     });
@@ -166,28 +219,30 @@ exports.getEvents = async (req, res) => {
     if (title) filters.title = { $regex: title, $options: 'i' }; // searching for title
     if (category) filters.category = category;
     if (type) filters.type = type;
-    if (createdBefore) filters.createdAt = { $lt: new Date(+createdBefore) };
+    if (createdBefore) filters.createdAt = { $lt: new Date(createdBefore) };
     if (createdAfter)
       filters.createdAt = {
         ...(filters.createdAt || {}),
-        $gt: new Date(+createdAfter),
+        $gt: new Date(createdAfter),
       };
-    if (startsBefore) filters.date = { $lt: new Date(+startsBefore) };
+    if (startsBefore) filters.date = { $lt: new Date(startsBefore) };
     if (startsAfter)
       filters.date = {
         ...(filters.date || {}),
-        $gt: new Date(+startsAfter),
+        $gt: new Date(startsAfter),
       };
-    if (country) filters['location.country'] = country;
-    if (city) filters['location.city'] = city;
+    if (country) filters['location.country'] = country.toLowerCase();
+    if (city) filters['location.city'] = city.toLowerCase();
     if (near) {
-      const { lon, lat } = near;
+      const lon = near[0];
+      const lat = near[1];
       filters['location.point'] = {
         $near: {
           $geometry: {
             type: 'Point',
             coordinates: [parseFloat(lon), parseFloat(lat)],
           },
+          $maxDistance: 50000, // 50 KM
         },
       };
     }
@@ -206,14 +261,17 @@ exports.getEvents = async (req, res) => {
         model: Application,
       });
 
-    // ordering
-    let sort;
-    if (orderBy === 'time') sort = { date: 1 };
-    else if (orderBy === 'likes') sort = { likes: -1 };
-    else if (orderBy === 'rating') sort = { rating: -1 };
-    else sort = { date: 1 };
+    if (!near) {
+      // if we have near property, it will order them by distance
+      // ordering
+      let sort;
+      if (orderBy === 'time') sort = { date: 1 };
+      else if (orderBy === 'likes') sort = { likes: -1 };
+      else if (orderBy === 'rating') sort = { rating: -1 };
+      else sort = { date: 1 };
 
-    query.sort(sort);
+      query.sort(sort);
+    }
 
     // limiting
     query.limit(+limit);
@@ -256,13 +314,33 @@ exports.deleteEventById = async (req, res) => {
         .status(404)
         .json(errorResponse(`Event with id ${id} does not exist.`, 404));
 
-    // Check if the current user is an admin or the organizer of the event
-    if (!req.isAdmin && event.organizerId.toString() !== req.userId)
+    // Check if the current user is an admin
+    if (!req.isAdmin)
       return res.status(403).json(errorResponse('Access denied.', 403));
 
-    // If the current user is the organizer or an admin, proceed with deletion
+    // If the current user is an admin, proceed with deletion
+    const application = await Application.findByIdAndDelete(
+      event.applicationId
+    );
+    const createdEvents = await User.findByIdAndUpdate(
+      event.organizerId,
+      {
+        $pull: { createdEvents: event._id },
+      },
+      { new: true }
+    ).select('createdEvents');
+    // TODO: delete reports of event ??
     const result = await Event.findByIdAndDelete(id);
-    return res.status(200).json(success(result, 'Event deleted successfully.'));
+    return res.status(200).json(
+      success(
+        {
+          deletedEvent: result.toObject(),
+          deletedApplication: application.toObject(),
+          newUserCreatedEvents: createdEvents.toObject().createdEvents,
+        },
+        'Event deleted successfully.'
+      )
+    );
   } catch (error) {
     if (error instanceof mongoose.CastError)
       return res
@@ -290,6 +368,31 @@ exports.updateLikes = async (req, res) => {
       return res
         .status(400)
         .json(errorResponse('Bad Request! Action is not defined.', 400));
+
+    // Check if the user has already liked the event and action is like
+    if (action === 'like') {
+      const userLikedEvent = await User.findOne({
+        _id: userId,
+        likedEvents: eventId,
+      });
+      if (userLikedEvent)
+        return res
+          .status(409)
+          .json(errorResponse('User already liked the event', 409, 'conflict'));
+    }
+
+    // Check if the user has not liked the event and action is unlike
+    if (action === 'unlike') {
+      const userLikedEvent = await User.findOne({
+        _id: userId,
+        likedEvents: eventId,
+      });
+      if (!userLikedEvent)
+        return res
+          .status(409)
+          .json(errorResponse('User has not liked the event', 409, 'conflict'));
+    }
+
     const value = action === 'like' ? 1 : -1;
     const result = await Event.findByIdAndUpdate(
       eventId,
@@ -343,7 +446,7 @@ exports.addComment = async (req, res) => {
   try {
     const { error: userIdError } = Joi.object({
       userId: Joi.objectId().required(),
-    }).validate({ userId });
+    }).validate({ userId: userId.toString() });
     if (userIdError)
       return res
         .status(401)
@@ -357,7 +460,10 @@ exports.addComment = async (req, res) => {
         .status(400)
         .json(validationError(eventIdError, eventIdError.details[0].message));
 
-    const { error: commentValidationError } = validateComment(req.body);
+    const { error: commentValidationError } = Joi.object({
+      text: Joi.string().min(1).max(200).required(),
+    }).validate(req.body);
+
     if (commentValidationError)
       return res
         .status(400)
@@ -387,7 +493,7 @@ exports.addComment = async (req, res) => {
 
     return res
       .status(201)
-      .json(success(result.comments, 'Comment added successfully.'));
+      .json(success(result.toObject().comments, 'Comment added successfully.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
       return res
@@ -406,7 +512,7 @@ exports.deleteCommentById = async (req, res) => {
   try {
     const { error: commentIdError } = Joi.object({
       commentId: Joi.objectId().required(),
-    }).validate(eventId);
+    }).validate({ commentId });
     if (commentIdError)
       return res
         .status(400)
@@ -414,7 +520,7 @@ exports.deleteCommentById = async (req, res) => {
 
     const { error: eventIdError } = Joi.object({
       eventId: Joi.objectId().required(),
-    }).validate(eventId);
+    }).validate({ eventId });
     if (eventIdError)
       return res
         .status(400)
@@ -442,13 +548,14 @@ exports.deleteCommentById = async (req, res) => {
         );
 
     // Check if the user is authorized to delete the comment
-    if (commentToDelete.userId.toString() !== userId && !isAdmin)
+    if (commentToDelete.userId.toString() !== userId.toString() && !isAdmin)
       return res
         .status(403)
         .json(
           errorResponse(
             'Access Denied! Unauthorized to delete this comment.',
-            403
+            403,
+            'forbidden'
           )
         );
 
@@ -466,7 +573,9 @@ exports.deleteCommentById = async (req, res) => {
 
     return res
       .status(200)
-      .json(success(result.comments, 'Comment deleted successfully.'));
+      .json(
+        success(result.toObject().comments, 'Comment deleted successfully.')
+      );
   } catch (error) {
     debug(`Error in deleteCommentById: ${error}`);
     return res
@@ -483,8 +592,8 @@ exports.updateRating = async (req, res) => {
   try {
     // Validate event and user IDs
     const { error: eventIdError } = Joi.object({
-      id: Joi.objectId().required(),
-    }).validate(eventId);
+      eventId: Joi.objectId().required(),
+    }).validate({ eventId });
     if (eventIdError)
       return res
         .status(400)
@@ -492,19 +601,11 @@ exports.updateRating = async (req, res) => {
 
     const { error: userIdError } = Joi.object({
       userId: Joi.objectId().required(),
-    }).validate(userId);
+    }).validate({ userId: userId.toString() });
     if (userIdError)
       return res
         .status(400)
         .json(validationError(userIdError, 'Invalid User Id'));
-
-    // Check if the event exists
-    const event = await Event.findById(eventId);
-
-    if (!event)
-      return res
-        .status(404)
-        .json(errorResponse(`Event with ID: ${eventId} not found`, 404));
 
     // Validate the request body for action and rating
     const { error: actionError } = Joi.object({
@@ -520,6 +621,14 @@ exports.updateRating = async (req, res) => {
         .status(400)
         .json(validationError(actionError, actionError.details[0].message));
 
+    // Check if the event exists
+    const event = await Event.findById(eventId);
+
+    if (!event)
+      return res
+        .status(404)
+        .json(errorResponse(`Event with ID: ${eventId} not found`, 404));
+
     // Fetch the user from the database based on userId
     const user = await User.findById(userId);
 
@@ -531,18 +640,24 @@ exports.updateRating = async (req, res) => {
     if (action === 'rate') {
       if (ratedEventIndex !== -1)
         return res
-          .status(400)
-          .json(errorResponse('You have already rated this event.', 400));
+          .status(409)
+          .json(
+            errorResponse('You have already rated this event.', 409, 'conflict')
+          );
 
       // Calculate the new average rating and update the event
-      const newRatingCount = event.ratingCount + 1;
-      const newTotalRating = event.rating * event.ratingCount + rating;
-      const newAverageRating = newTotalRating / newRatingCount;
+      if (event.ratingCount === 0) {
+        event.rating = rating;
+        event.ratingCount = 1;
+      } else {
+        const newRatingCount = event.ratingCount + 1;
+        const newTotalRating = event.rating * event.ratingCount + +rating; // +rating converts the string to a number
+        const newAverageRating = newTotalRating / newRatingCount;
 
-      // Update the event with the new rating and ratingCount
-      event.rating = newAverageRating;
-      event.ratingCount = newRatingCount;
-
+        // Update the event with the new rating and ratingCount
+        event.rating = newAverageRating;
+        event.ratingCount = newRatingCount;
+      }
       // Add the rated event to the user's ratedEvents array
       user.ratedEvents.push({
         eventId,
@@ -551,8 +666,10 @@ exports.updateRating = async (req, res) => {
     } else if (action === 'unrate') {
       if (ratedEventIndex === -1)
         return res
-          .status(400)
-          .json(errorResponse("You haven't rated this event.", 400));
+          .status(409)
+          .json(
+            errorResponse("You haven't rated this event.", 409, 'conflict')
+          );
 
       const removedRating = user.ratedEvents.splice(ratedEventIndex, 1)[0]
         .rating;
@@ -572,9 +689,13 @@ exports.updateRating = async (req, res) => {
     await event.save();
     await user.save();
 
-    return res
-      .status(200)
-      .json(success({ rating: event.rating, ratingCount: event.ratingCount }));
+    return res.status(200).json(
+      success({
+        rating: action === 'rate' ? +rating : null,
+        averageRating: event.rating,
+        ratingCount: event.ratingCount,
+      })
+    );
   } catch (error) {
     debug(`Error in updateRating: ${error}`);
     return res
@@ -590,8 +711,8 @@ exports.addUserToEvent = async (req, res) => {
   try {
     // Validate event and user IDs
     const { error: eventIdError } = Joi.object({
-      id: Joi.objectId().required(),
-    }).validate(eventId);
+      eventId: Joi.objectId().required(),
+    }).validate({ eventId });
     if (eventIdError)
       return res
         .status(400)
@@ -599,7 +720,7 @@ exports.addUserToEvent = async (req, res) => {
 
     const { error: userIdError } = Joi.object({
       userId: Joi.objectId().required(),
-    }).validate(userId);
+    }).validate({ userId: userId.toString() });
     if (userIdError)
       return res
         .status(400)
@@ -628,8 +749,10 @@ exports.addUserToEvent = async (req, res) => {
 
     if (isUserJoined)
       return res
-        .status(400)
-        .json(errorResponse('User is already part of this event', 400));
+        .status(409)
+        .json(
+          errorResponse('User is already part of this event', 409, 'conflict')
+        );
 
     // Add the event to the user's joinedEvents array
     user.joinedEvents.push(eventId);
@@ -637,7 +760,9 @@ exports.addUserToEvent = async (req, res) => {
     // Save the changes to the user
     await user.save();
 
-    return res.status(200).json(success('User added to event successfully.'));
+    return res
+      .status(200)
+      .json(success({ eventId, userId }, 'User added to event successfully.'));
   } catch (error) {
     debug(`Error in addUserToEvent: ${error}`);
     return res
@@ -655,8 +780,8 @@ exports.deleteUserFromEvent = async (req, res) => {
   try {
     // Validate event and user IDs
     const { error: eventIdError } = Joi.object({
-      id: Joi.objectId().required(),
-    }).validate(eventId);
+      eventId: Joi.objectId().required(),
+    }).validate({ eventId });
     if (eventIdError)
       return res
         .status(400)
@@ -664,7 +789,7 @@ exports.deleteUserFromEvent = async (req, res) => {
 
     const { error: userIdError } = Joi.object({
       userId: Joi.objectId().required(),
-    }).validate(userId);
+    }).validate({ userId: userId.toString() });
     if (userIdError)
       return res
         .status(400)
@@ -693,8 +818,8 @@ exports.deleteUserFromEvent = async (req, res) => {
 
     if (!isUserJoined)
       return res
-        .status(400)
-        .json(errorResponse('User is not part of this event', 400));
+        .status(409)
+        .json(errorResponse('User is not part of this event', 409, 'conflict'));
 
     // Remove the event from the user's joinedEvents array
     user.joinedEvents = user.joinedEvents.filter(
@@ -706,7 +831,9 @@ exports.deleteUserFromEvent = async (req, res) => {
 
     return res
       .status(200)
-      .json(success('User removed from event successfully.'));
+      .json(
+        success({ eventId, userId }, 'User removed from event successfully.')
+      );
   } catch (error) {
     debug(`Error in deleteUserFromEvent: ${error}`);
     return res

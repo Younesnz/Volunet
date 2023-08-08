@@ -32,10 +32,14 @@ const locationSchema = new mongoose.Schema({
   },
   country: {
     type: String,
+    lowercase: true,
+    trim: true,
     required: true,
   },
   city: {
     type: String,
+    lowercase: true,
+    trim: true,
     required: true,
   },
   address: {
@@ -154,7 +158,6 @@ const eventSchema = new mongoose.Schema({
   },
   location: {
     type: locationSchema,
-    required: !(this.type === 'online'), // TODO: test this
   },
   contact: {
     type: contactSchema,
@@ -184,63 +187,17 @@ const eventSchema = new mongoose.Schema({
   // },
 });
 
-eventSchema.pre('save', function (next) {
-  // Transform date from timestamp to Date object
-  if (this.date instanceof Date === false) {
-    this.date = new Date(this.date);
-  }
-
-  // Transform location fields into locationSchema
-  if (this.type !== 'online') {
-    this.location = {
-      point: {
-        type: 'Point',
-        coordinates: [this.lon, this.lat],
-      },
-      country: this.country,
-      city: this.city,
-      address: this.address,
-    };
-  }
-
-  if (this.contactPhone) this.contact.phone = this.contactPhone;
-  if (this.contactEmail) this.contact.email = this.contactEmail;
-  if (this.contactWebsite) this.contact.website = this.contactWebsite;
-
-  next();
+eventSchema.virtual('contactPhone').set(function (phone) {
+  this.contact = this.contact || {};
+  this.contact.phone = phone;
 });
-
-eventSchema.pre('findOneAndUpdate', function (next) {
-  const updateData = this.getUpdate();
-  const { lon, lat, country, city, date } = updateData;
-
-  if (date instanceof Date === false && typeof date === 'number') {
-    updateData.date = new Date(date);
-  }
-
-  if (lon && lat && country && city && updateData.type !== 'online') {
-    updateData.location = {
-      point: {
-        type: 'Point',
-        coordinates: [lon, lat],
-      },
-      country,
-      city,
-    };
-  }
-
-  // Parse and update the contact fields if they exist in the updateData
-  if (updateData.contactPhone)
-    updateData.contact.phone = updateData.contactPhone;
-  if (updateData.contactEmail)
-    updateData.contact.email = updateData.contactEmail;
-  if (updateData.contactWebsite)
-    updateData.contact.website = updateData.contactWebsite;
-  delete updateData.contactPhone;
-  delete updateData.contactEmail;
-  delete updateData.contactWebsite;
-
-  next();
+eventSchema.virtual('contactEmail').set(function (email) {
+  this.contact = this.contact || {};
+  this.contact.email = email;
+});
+eventSchema.virtual('contactWebsite').set(function (website) {
+  this.contact = this.contact || {};
+  this.contact.website = website;
 });
 
 const Event = mongoose.model('Event', eventSchema);
@@ -263,19 +220,10 @@ const validateEvent = (event, isRequired = true) => {
       'other'
     ),
     type: Joi.string().valid('online', 'physical', 'both'),
-    date: Joi.date().timestamp(), // all dates are recieving as timestamp for consistancy
-    pictures: Joi.array().items(Joi.string()),
-    // organizerId: Joi.objectId(), // TODO: delete this after testing. it shouldn't be allowed
+    date: Joi.date().iso(),
+    pictures: Joi.array().items(Joi.string().uri()),
 
     address: Joi.string().min(5).max(100),
-
-    // sponsors: Joi.array().items(
-    //   Joi.object().keys({
-    //     name: Joi.string().max(50),
-    //     link: Joi.string().uri(),
-    //     logo: Joi.string().uri(),
-    //   })
-    // ),
 
     contactPhone: Joi.string()
       .regex(/^[0-9]{5,20}$/)
@@ -284,27 +232,18 @@ const validateEvent = (event, isRequired = true) => {
       }),
     contactEmail: Joi.string().email(),
     contactWebsite: Joi.string().uri(),
-
-    // contact: Joi.object().keys({
-    //   phone: Joi.string()
-    //     .regex(/^[0-9]{5,20}$/)
-    //     .messages({
-    //       'string.pattern.base': `Phone number is not valid.`,
-    //     }),
-    //   email: Joi.string().email(),
-    //   website: Joi.string().uri(),
-    // }),
-
     // for location:
     country: Joi.string().max(50),
     city: Joi.string().max(50),
     lon: Joi.number().min(-180).max(180),
     lat: Joi.number().min(-90).max(90),
-  });
+  })
+    .min(1)
+    .message('at least on field is required.');
 
   if (isRequired) {
     joiSchema = joiSchema.fork(
-      ['title', 'description', 'type', 'date', 'organizerId'],
+      ['title', 'description', 'type', 'date'],
       (item) => item.required()
     );
     if (event.type && event.type !== 'online')
@@ -334,16 +273,16 @@ const validateEventQuery = (query) => {
       'other'
     ),
     type: Joi.string().valid('online', 'physical', 'both'),
-    createdBefore: Joi.date().timestamp(),
-    createdAfter: Joi.date().timestamp(),
-    startsBefore: Joi.date().timestamp(),
-    startsAfter: Joi.date().timestamp(),
+    createdBefore: Joi.date().iso(),
+    createdAfter: Joi.date().iso(),
+    startsBefore: Joi.date().iso(),
+    startsAfter: Joi.date().iso(),
     country: Joi.string().max(50),
     city: Joi.string().max(50),
-    near: Joi.object().keys({
-      lon: Joi.number().min(-180).max(180),
-      lat: Joi.number().min(-90).max(90),
-    }),
+    near: Joi.array().length(2).items(
+      Joi.number().min(-180).max(180).required(), // longitude
+      Joi.number().min(-90).max(90).required() // latitude
+    ),
     orderBy: Joi.string().valid('time', 'likes', 'rating'),
     limit: Joi.number().min(1).max(100),
   });
@@ -351,18 +290,14 @@ const validateEventQuery = (query) => {
   return joiSchema.validate(query);
 };
 
-const validateComment = (comment) => {
-  const joiSchema = Joi.object({
-    text: Joi.string().min(1).max(200).required(),
-    userId: Joi.objectId().required(),
-  });
-  return joiSchema.validate(comment);
-};
+// const validateComment = (comment) => {
+//   const joiSchema = Joi.object({
+//     text: Joi.string().min(1).max(200).required(),
+//   });
+//   return joiSchema.validate(comment);
+// };
 
 exports.Event = Event;
 exports.validate = validateEvent;
 exports.validateQuery = validateEventQuery;
-exports.validateComment = validateComment;
-
-// TODO: add registered users (route)
-// TODO: add rated users (route)
+// exports.validateComment = validateComment;

@@ -2,13 +2,19 @@ const express = require('express');
 
 const router = express.Router();
 
+const { authenticate, adminOnly } = require('../middleware/auth');
 const applicationController = require('../controllers/applicationController');
 
-// this is for testing and should be removed later, applications will be created when a new event submitted
-router.post('/', applicationController.testAddApp);
-router.get('/:id', applicationController.getAppById);
-router.get('/', applicationController.getApps);
-router.put('/:id', applicationController.updateAppById);
-router.delete('/:id', applicationController.deleteAppById);
+router.get('/:id', authenticate, applicationController.getAppById);
+router.get('/', authenticate, adminOnly, applicationController.getApps);
+router.put(
+  '/:id',
+  authenticate,
+  adminOnly,
+  applicationController.updateAppById
+);
+
+// we don't need to delete applications as they will be deleted when an event is deleted
+// router.delete('/:id', applicationController.deleteAppById);
 
 module.exports = router;

@@ -2,6 +2,7 @@ const debug = require('debug')('app:ReportController');
 const _ = require('lodash');
 const mongoose = require('mongoose');
 const { Report, validate } = require('../models/reportModel');
+const { Event } = require('../models/eventModel');
 const {
   success,
   errorResponse,
@@ -10,23 +11,42 @@ const {
 
 exports.addReport = async (req, res) => {
   try {
-    req.body.userId = req.userId; // from Auth
+    req.body.userId = req.userId.toString(); // from Auth
+    if (req.body.adminId || req.body.status)
+      return res
+        .status(400)
+        .json(
+          errorResponse(
+            'cannot set adminId or status while reporting',
+            400,
+            'validation'
+          )
+        );
+
     const { error } = validate(req.body);
     if (error)
       return res
         .status(400)
         .json(validationError(error, error.details[0].message));
 
-    // Check if the user has already reported the post
+    const checkEvent = await Event.findById(req.body.eventId);
+    if (!checkEvent) {
+      return res
+        .status(404)
+        .json(errorResponse('Event not found', 404, 'not found'));
+    }
+    // Check if the user has already reported the event
     const existingReport = await Report.findOne({
       userId: req.userId,
-      eventId: req.body.eventId, // Assuming the post identifier is in req.body as 'postId'
+      eventId: req.body.eventId, // the event identifier is in req.body as 'eventId'
     });
 
     if (existingReport) {
       return res
-        .status(400)
-        .json(errorResponse('You have already reported this post.', 400));
+        .status(409)
+        .json(
+          errorResponse('You have already reported this post.', 409, 'conflict')
+        );
     }
 
     const report = new Report(req.body);
@@ -90,7 +110,7 @@ exports.getReports = async (req, res) => {
       delete queries.before;
       queries.createdAt = {
         ...queries.createdAt,
-        $lt: new Date(+req.query.before), // + for converting it to number
+        $lt: new Date(req.query.before),
       };
     }
 
@@ -98,7 +118,7 @@ exports.getReports = async (req, res) => {
       delete queries.after;
       queries.createdAt = {
         ...queries.createdAt,
-        $gt: new Date(+req.query.after),
+        $gt: new Date(req.query.after),
       };
     }
 
@@ -144,13 +164,19 @@ exports.getReportById = async (req, res) => {
     if (!report)
       return res
         .status(404)
-        .json(errorResponse(`Report with id ${id} does not exist.`, 404));
+        .json(
+          errorResponse(
+            `Report with id ${id} does not exist.`,
+            404,
+            'not found'
+          )
+        );
     return res.status(200).json(success(report, 'Found successfully.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
       return res
         .status(400)
-        .json(errorResponse(`Invalid Report Id: ${id}`, 400));
+        .json(errorResponse(`Invalid Report Id: ${id}`, 400, 'validation'));
     debug(`Error in getReportById: ${error}`);
     return res
       .status(500)
@@ -168,6 +194,19 @@ exports.updateReportById = async (req, res) => {
     if (!req.isAdmin)
       return res.staus(403).json(errorResponse('Forbidden', 403));
 
+    if (_.isEmpty(req.body))
+      return res
+        .status(400)
+        .json(errorResponse('No data to update', 400, 'validation'));
+
+    if (req.body.userId || req.body.eventId)
+      return res
+        .status(400)
+        .json(
+          errorResponse('Cannot update userId or eventId', 400, 'validation')
+        );
+
+    req.body.adminId = req.userId.toString();
     const { error } = validate(req.body, false);
     if (error)
       return res
@@ -210,7 +249,13 @@ exports.deleteReportById = async (req, res) => {
     if (!result)
       return res
         .status(404)
-        .json(errorResponse(`Report with id ${id} does not exist.`, 404));
+        .json(
+          errorResponse(
+            `Report with id ${id} does not exist.`,
+            404,
+            'not found'
+          )
+        );
     return res
       .status(200)
       .json(success(result, 'Report deleted successfully.'));
@@ -218,7 +263,7 @@ exports.deleteReportById = async (req, res) => {
     if (error instanceof mongoose.CastError)
       return res
         .status(400)
-        .json(errorResponse(`Invalid Report Id: ${id}`, 400));
+        .json(errorResponse(`Invalid Report Id: ${id}`, 400, 'validation'));
     debug(`Error in deleteReportById: ${error}`);
     return res
       .status(500)
