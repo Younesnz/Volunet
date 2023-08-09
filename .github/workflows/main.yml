@@ -17,6 +17,8 @@ jobs:
       matrix:
         node-version: [16.x]
         mongodb-version: [4.2]
+    env:
+      JWT_SECRET: ${{ secrets.JWT_SECRET }} # This line sets the environment variable for all the following steps
 
     steps:
       - name: Git checkout
