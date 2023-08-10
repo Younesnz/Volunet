@@ -6,9 +6,12 @@ const { errorResponse } = require('../utils/responseUtils');
 const authenticate = async (req, res, next) => {
   try {
     // Get token from headers
-    const token = req.header('Authorization');
+    let token = req.header('Authorization');
 
-    if (!token) throw new Error('Token required');
+    if (!token) {
+      token = req.header('Auth');
+      if (!token) throw new Error('Token required');
+    }
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
