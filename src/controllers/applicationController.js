@@ -1,5 +1,6 @@
 const debug = require('debug')('app:applicationController');
 const mongoose = require('mongoose');
+const { notify, emails } = require('../utils/notificationUtils');
 const {
   Application,
   validate,
@@ -101,6 +102,13 @@ exports.updateAppById = async (req, res) => {
             'not found'
           )
         );
+
+    let emailData = emails.applicationUpdated;
+    if (result.status === 'accepted') emailData = emails.applicationAccepted;
+    else if (result.status === 'rejected')
+      emailData = emails.applicationRejected;
+
+    notify(result.userId, emailData);
 
     return res
       .status(200)

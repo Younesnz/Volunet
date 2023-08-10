@@ -1,6 +1,7 @@
 const debug = require('debug')('app:ReportController');
 const _ = require('lodash');
 const mongoose = require('mongoose');
+const { notify, emails } = require('../utils/notificationUtils');
 const { Report, validate } = require('../models/reportModel');
 const { Event } = require('../models/eventModel');
 const {
@@ -51,6 +52,9 @@ exports.addReport = async (req, res) => {
 
     const report = new Report(req.body);
     const result = await report.save();
+
+    notify(result.userId, emails.reportReceived);
+
     return res.status(200).json(success(result, 'Report added successfully.'));
   } catch (error) {
     debug(error);
@@ -219,6 +223,8 @@ exports.updateReportById = async (req, res) => {
       return res
         .status(404)
         .json(errorResponse(`Report with id ${id} does not exist.`, 404));
+
+    notify(result.userId, emails.reportReviewed);
 
     return res
       .status(200)

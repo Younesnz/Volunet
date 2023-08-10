@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const passwordComplexity = require('joi-password-complexity');
 
 const User = require('../models/userModel');
-
+const { notify, emails } = require('../utils/notificationUtils');
 const {
   success,
   validationError,
@@ -87,6 +87,7 @@ exports.registerUser = async (req, res) => {
     });
 
     const result = await user.save();
+    notify(user._id, emails.welcome);
     return res
       .status(201)
       .json(
@@ -473,20 +474,16 @@ exports.createNotification = async (req, res) => {
       return res
         .status(400)
         .json(validationError(error, error.details[0].message));
-    const result = await User.findByIdAndUpdate(
-      id,
-      {
-        $push: { notifications: req.body },
-      },
-      { new: true }
-    ).select('_id notifications');
-    if (!result)
+
+    const { error: notifError, notification } = await notify(id, req.body);
+
+    if (notifError)
       return res
-        .status(404)
+        .status(notifError.status)
         .json(
-          errorResponse(`User with ID ${id} does not exist.`, 404, 'not found')
+          errorResponse(notifError.message, notifError.status, notifError.type)
         );
-    return res.status(201).json(success(result, 'Notification created.'));
+    return res.status(201).json(success(notification, 'Notification created.'));
   } catch (error) {
     if (error instanceof mongoose.CastError)
       return res
@@ -526,6 +523,8 @@ exports.deleteNotification = async (req, res) => {
     debug(`Error in deleteNotification: ${error}`);
     return res
       .status(500)
-      .json('Internal server error. failed to delete notification.');
+      .json(
+        errorResponse('Internal server error. failed to delete notification.')
+      );
   }
 };

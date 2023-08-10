@@ -5,6 +5,7 @@ Joi.objectId = require('joi-objectid')(Joi);
 const { Event, validate, validateQuery } = require('../models/eventModel');
 const User = require('../models/userModel');
 const { Application } = require('../models/applicationModel');
+const { notify, emails } = require('../utils/notificationUtils');
 const {
   success,
   errorResponse,
@@ -87,6 +88,8 @@ exports.addEvent = async (req, res) => {
     await User.findByIdAndUpdate(req.userId, {
       $push: { createdEvents: event._id },
     });
+
+    notify(req.userId, emails.eventCreated);
 
     return res
       .status(200)
@@ -760,6 +763,8 @@ exports.addUserToEvent = async (req, res) => {
     // Save the changes to the user
     await user.save();
 
+    notify(userId, emails.joinedToEvent);
+
     return res
       .status(200)
       .json(success({ eventId, userId }, 'User added to event successfully.'));
@@ -828,6 +833,8 @@ exports.deleteUserFromEvent = async (req, res) => {
 
     // Save the changes to the user
     await user.save();
+
+    notify(userId, emails.leftEvent);
 
     return res
       .status(200)
