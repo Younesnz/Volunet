@@ -43,7 +43,7 @@ async function sendMail(options) {
     };
 
     const info = await transporter.sendMail(mailOptions);
-
+    debug(info);
     return info;
   } catch (error) {
     debug(`error sending email: ${error.message}`);
