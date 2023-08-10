@@ -34,7 +34,14 @@ const options = {
 };
 
 const specs = swaggerJsdoc(options);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+// CDN CSS
+const CSS_URL =
+  'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui.min.css';
+app.use(
+  '/api-docs',
+  swaggerUi.serve,
+  swaggerUi.setup(specs, { customCssUrl: CSS_URL })
+);
 
 app.use(
   session({
@@ -51,12 +58,10 @@ app.use(passport.session());
 // Initialize DB
 require('./db')();
 
-
 const usersRoute = require('./routes/users');
 const applicationsRoute = require('./routes/applications');
 const eventsRoute = require('./routes/events');
 const reportsRoute = require('./routes/reports');
-
 
 app.get('/', (req, res) => {
   res.sendFile('public/index.html');

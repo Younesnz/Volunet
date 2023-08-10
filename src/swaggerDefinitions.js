@@ -1,3 +1,5 @@
+const { string, object } = require('joi');
+
 module.exports = {
   Application: {
     type: 'object',
@@ -285,5 +287,163 @@ module.exports = {
       },
     },
   },
+
+  RegisterUser: {
+    type: 'object',
+    properties: {
+      username: {
+        type: 'string',
+        example: 'Goichaurich',
+      },
+      email: {
+        type: 'string',
+        example: 'AshleyJHarper@outlook.com',
+      },
+      password: {
+        type: 'string',
+        example: 'Eenge7viecie',
+      },
+      country: {
+        type: 'string',
+        example: 'UK',
+      },
+      city: {
+        type: 'string',
+        example: 'London',
+      },
+      first_name: {
+        type: 'string',
+        example: 'Ashley',
+      },
+      last_name: {
+        type: 'string',
+        example: 'Harper',
+      },
+      birthDate: {
+        type: 'string',
+        format: 'date',
+        example: '1989-02-16',
+      },
+      profilePic: {
+        type: 'string',
+        example: 'https://source.unsplash.com/AJIqZDAUD7A/300x300',
+      },
+    },
+    required: ['username', 'email', 'password', 'country', 'city'],
+  },
+
+  LoginUser: {
+    type: 'object',
+    properties: {
+      email: {
+        type: 'string',
+        example: 'AshleyJHarper@outlook.com',
+      },
+      password: {
+        type: 'string',
+        example: 'Eenge7viecie',
+      },
+    },
+    required: ['email', 'password'],
+  },
+
+  updateUserProfile: {
+    type: 'object',
+    properties: {
+      username: {
+        type: 'string',
+        example: 'Goichaurich',
+      },
+      email: {
+        type: 'string',
+        example: 'AshleyJHarper@outlook.com',
+      },
+    },
+  },
+
+  userNotification: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        example: 'Welcome!',
+      },
+      message: {
+        type: 'string',
+        example: 'Welcome to volunet!',
+      },
+      sendEmail: {
+        type: 'string',
+        example: 'true',
+      },
+    },
+  },
+
+  AddEvent: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        example: 'test event for deleting',
+      },
+      description: {
+        type: 'string',
+        example: 'test test test',
+      },
+      type: {
+        type: 'string',
+        example: 'online',
+      },
+      date: {
+        type: 'string',
+        example: '2023-08-18 10:00',
+      },
+      address: {
+        type: 'string',
+        example: '145 W 96th St, New York, NY 10025, United States',
+      },
+      country: {
+        type: 'string',
+        example: 'US',
+      },
+      city: {
+        type: 'string',
+        example: 'New York',
+      },
+      lon: {
+        type: 'number',
+        example: -73.9696441,
+      },
+      lat: {
+        type: 'number',
+        example: 40.7939432,
+      },
+      category: {
+        type: 'string',
+        example: 'workshop',
+      },
+      pictures: {
+        type: 'array',
+        example: [
+          'https://source.unsplash.com/w46tRF64qNc/',
+          'https://source.unsplash.com/EQpXnijYejQ/',
+          'https://source.unsplash.com/iUbsw_VOkbM/',
+        ],
+      },
+      contactPhone: {
+        type: 'string',
+        example: '905343011295',
+      },
+      contactEmail: {
+        type: 'string',
+        example: 'events@CreativeCraft.co',
+      },
+      contactWebsite: {
+        type: 'string',
+        example: 'https://www.animals.ai',
+      },
+    },
+  },
+
   // Other model definitions go here
 };
