@@ -3,11 +3,13 @@ const express = require('express');
 const router = express.Router();
 
 const eventController = require('../controllers/eventController');
+
 const { authenticate, adminOnly } = require('../middleware/auth');
 
 router.post('/', authenticate, eventController.addEvent);
 router.get('/:id', eventController.getEventById);
 router.get('/', eventController.getEvents);
+
 router.put('/:id', authenticate, eventController.updateEventById);
 router.delete('/:id', authenticate, adminOnly, eventController.deleteEventById);
 

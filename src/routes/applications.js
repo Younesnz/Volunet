@@ -5,6 +5,7 @@ const router = express.Router();
 const { authenticate, adminOnly } = require('../middleware/auth');
 const applicationController = require('../controllers/applicationController');
 
+
 router.get('/:id', authenticate, applicationController.getAppById);
 router.get('/', authenticate, adminOnly, applicationController.getApps);
 router.put(

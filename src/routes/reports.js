@@ -7,6 +7,7 @@ const reportController = require('../controllers/reportController');
 
 // getReports can be filtered by query
 // acceptable queries: status, category, after(time), before(time), userId, adminId, eventId
+
 router.get('/', authenticate, adminOnly, reportController.getReports);
 router.post('/', authenticate, reportController.addReport);
 router.get('/:id', authenticate, adminOnly, reportController.getReportById);
