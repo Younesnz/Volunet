@@ -1,7 +1,9 @@
 const nodeMailer = require('nodemailer');
+const path = require('path');
 const debug = require('debug')('app:email');
+const hbs = require('nodemailer-express-handlebars');
 
-async function sendMail(to, subject, title, body) {
+async function sendMail(options) {
   try {
     const transporter = nodeMailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -13,12 +15,34 @@ async function sendMail(to, subject, title, body) {
       },
     });
 
-    const info = await transporter.sendMail({
+    const handlebarOptions = {
+      viewEngine: {
+        extName: '.handlebars',
+        partialsDir: path.resolve('../../views/email'),
+        defaultLayout: false,
+      },
+      viewPath: path.resolve('./views'),
+      extName: '.handlebars',
+    };
+
+    transporter.use('compile', hbs(handlebarOptions));
+
+    const mailOptions = {
       from: `Volunet <${process.env.SMTP_USER}>`,
-      to,
-      subject,
-      html: `<h1>${title}</h1><p>${body}</p>`,
-    });
+      to: options.to,
+      subject: options.subject,
+      template: 'email',
+      context: {
+        title: options.title,
+        text: options.text,
+        name: options.name
+          ? options.name.charAt(0).toUpperCase() + options.name.slice(1)
+          : options.username,
+        action: options.action,
+      },
+    };
+
+    const info = await transporter.sendMail(mailOptions);
 
     return info;
   } catch (error) {

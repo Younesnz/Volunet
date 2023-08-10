@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const passwordComplexity = require('joi-password-complexity');
 
 const User = require('../models/userModel');
-const notify = require('../utils/notificationUtils');
+const { notify, emails } = require('../utils/notificationUtils');
 const {
   success,
   validationError,
@@ -87,6 +87,7 @@ exports.registerUser = async (req, res) => {
     });
 
     const result = await user.save();
+    notify(user._id, emails.welcome);
     return res
       .status(201)
       .json(
