@@ -19,7 +19,7 @@ services:
     environment:
       PORT: 3000
       MONGODB_URI: mongodb://mongo_db:27017
-      DB_NAME: 'simpleBackendDB'
+      DB_NAME: 'volunet'
       DEBUG: 'app:*'
     depends_on:
       - mongo_db
