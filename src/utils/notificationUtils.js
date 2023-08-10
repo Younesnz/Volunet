@@ -24,8 +24,9 @@ async function createAndNotify(userId, notificationData) {
     user.notifications.push(notification);
     await user.save();
 
+    let email = {};
     if (notification.sendEmail && user.email) {
-      await sendMail({
+      email = await sendMail({
         to: user.email,
         subject: notification.subject
           ? notification.subject
@@ -43,6 +44,7 @@ async function createAndNotify(userId, notificationData) {
         userId: user._id,
         username: user.username,
         notification: user.notifications[user.notifications.length - 1],
+        email,
       },
     };
   } catch (error) {
