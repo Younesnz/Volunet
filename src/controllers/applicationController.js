@@ -1,35 +1,17 @@
 const debug = require('debug')('app:applicationController');
 const mongoose = require('mongoose');
-const { Application, validate } = require('../models/applicationModel');
-const { User } = require('../models/userModel');
+const { notify, emails } = require('../utils/notificationUtils');
+const {
+  Application,
+  validate,
+  validateQuery,
+} = require('../models/applicationModel');
+
 const {
   success,
   validationError,
   errorResponse,
 } = require('../utils/responseUtils');
-
-// this is for testing, applications will be added while creating events
-// exports.testAddApp = async (req, res) => {
-//     try {
-//         const { error } = validate(req.body);
-//         if (error)
-//             return res
-//                 .status(400)
-//                 .json(validationError(error, error.details[0].message));
-//         const app = new Application(req.body);
-//         const result = await app.save();
-//         return res.status(200).json(success(result, 'application saved.'));
-//     } catch (error) {
-//         debug(`error in AddApp: ${error}`);
-//         return res
-//             .status(500)
-//             .json(
-//                 errorResponse(
-//                     'Internal Server Error: failed to add application'
-//                 )
-//             );
-//     }
-// };
 
 exports.getAppById = async (req, res) => {
   const { id } = req.params;
@@ -47,15 +29,23 @@ exports.getAppById = async (req, res) => {
     if (!app)
       return res
         .status(404)
-        .json(errorResponse(`Application with id ${id} does not exist.`, 404));
+        .json(
+          errorResponse(
+            `Application with id ${id} does not exist.`,
+            404,
+            'not found'
+          )
+        );
 
-    if (app.userId.toString() !== req.userId && !req.isAdmin)
+    // console.log(app.userId.toString(), req.userId.toString());
+    if (app.userId._id.toString() !== req.userId.toString() && !req.isAdmin)
       return res
         .status(403)
         .json(
           errorResponse(
             'You are not authorized to access this Application.',
-            403
+            403,
+            'forbidden'
           )
         );
 
@@ -85,11 +75,12 @@ exports.updateAppById = async (req, res) => {
         .json(
           errorResponse(
             'You are not authorized to access this Application.',
-            403
+            403,
+            'forbidden'
           )
         );
     }
-    const { error } = validate(req.body, false);
+    const { error } = validate(req.body);
     if (error)
       return res
         .status(400)
@@ -104,7 +95,20 @@ exports.updateAppById = async (req, res) => {
     if (!result)
       return res
         .status(404)
-        .json(errorResponse(`Application with id ${id} does not exist.`, 404));
+        .json(
+          errorResponse(
+            `Application with id ${id} does not exist.`,
+            404,
+            'not found'
+          )
+        );
+
+    let emailData = emails.applicationUpdated;
+    if (result.status === 'accepted') emailData = emails.applicationAccepted;
+    else if (result.status === 'rejected')
+      emailData = emails.applicationRejected;
+
+    notify(result.userId, emailData);
 
     return res
       .status(200)
@@ -125,42 +129,44 @@ exports.updateAppById = async (req, res) => {
   }
 };
 
-exports.deleteAppById = async (req, res) => {
-  const { id } = req.params;
-  try {
-    if (!req.isAdmin) {
-      return res
-        .status(403)
-        .json(
-          errorResponse(
-            'You are not authorized to access this Application.',
-            403
-          )
-        );
-    }
-    const result = await Application.findByIdAndDelete(id);
-    if (!result)
-      return res
-        .status(404)
-        .json(errorResponse(`Application with id ${id} does not exist.`, 404));
-    return res
-      .status(200)
-      .json(success(result, 'Application deleted successfully.'));
-  } catch (error) {
-    if (error instanceof mongoose.CastError)
-      return res
-        .status(400)
-        .json(errorResponse(`Invalid Application Id: ${id}`, 400));
-    debug(`Error in deleteAppById: ${error}`);
-    return res
-      .status(500)
-      .json(
-        errorResponse(
-          'Internal Server Error! failed to delete the Application by Id.'
-        )
-      );
-  }
-};
+// application is connected to event and it will be deleted when an event is deleted
+
+// exports.deleteAppById = async (req, res) => {
+//   const { id } = req.params;
+//   try {
+//     if (!req.isAdmin) {
+//       return res
+//         .status(403)
+//         .json(
+//           errorResponse(
+//             'You are not authorized to access this Application.',
+//             403
+//           )
+//         );
+//     }
+//     const result = await Application.findByIdAndDelete(id);
+//     if (!result)
+//       return res
+//         .status(404)
+//         .json(errorResponse(`Application with id ${id} does not exist.`, 404));
+//     return res
+//       .status(200)
+//       .json(success(result, 'Application deleted successfully.'));
+//   } catch (error) {
+//     if (error instanceof mongoose.CastError)
+//       return res
+//         .status(400)
+//         .json(errorResponse(`Invalid Application Id: ${id}`, 400));
+//     debug(`Error in deleteAppById: ${error}`);
+//     return res
+//       .status(500)
+//       .json(
+//         errorResponse(
+//           'Internal Server Error! failed to delete the Application by Id.'
+//         )
+//       );
+//   }
+// };
 
 exports.getApps = async (req, res) => {
   try {
@@ -174,7 +180,7 @@ exports.getApps = async (req, res) => {
           )
         );
     }
-    const { error } = validate(req.query, false);
+    const { error } = validateQuery(req.query, false);
     if (error)
       return res
         .status(400)
@@ -187,7 +193,7 @@ exports.getApps = async (req, res) => {
       delete queries.before;
       queries.createdAt = {
         ...queries.createdAt,
-        $lt: new Date(+req.query.before), // + for converting it to number
+        $lt: new Date(req.query.before),
       };
     }
 
@@ -195,7 +201,7 @@ exports.getApps = async (req, res) => {
       delete queries.after;
       queries.createdAt = {
         ...queries.createdAt,
-        $gt: new Date(+req.query.after),
+        $gt: new Date(req.query.after),
       };
     }
 

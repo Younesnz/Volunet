@@ -51,12 +51,13 @@ app.use(passport.session());
 // Initialize DB
 require('./db')();
 
+
+const usersRoute = require('./routes/users');
 const applicationsRoute = require('./routes/applications');
 const eventsRoute = require('./routes/events');
 const reportsRoute = require('./routes/reports');
-const usersRoute = require('./routes/users');
 
-// Home page
+
 app.get('/', (req, res) => {
   res.sendFile('public/index.html');
 });
